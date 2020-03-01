@@ -11031,7 +11031,11 @@ DriverEntry(
         adapterCount = 0;
 
         // Call initialization for ISA bustype.
+#if defined(__REACTOS__) && defined(SARCH_PC98)
+        KdPrint2((PRINT_PREFIX "\n\nATAPI IDE: Look for C-bus Controllers\n"));
+#else
         KdPrint2((PRINT_PREFIX "\n\nATAPI IDE: Look for ISA Controllers\n"));
+#endif
         newStatus =  ScsiPortInitialize(DriverObject,
                                         Argument2,
                                         &hwInitializationData.comm,

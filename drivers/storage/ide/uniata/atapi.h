@@ -1530,6 +1530,16 @@ UniataInitMapBase(
     IN PIDE_REGISTERS_2 BaseIoAddress2
     );
 
+#if defined(__REACTOS__) && defined(SARCH_PC98)
+VOID
+NTAPI
+UniataInitMapBasePc98(
+    IN struct _HW_CHANNEL* chan,
+    IN PIDE_REGISTERS_1 BaseIoAddress1,
+    IN PIDE_REGISTERS_2 BaseIoAddress2
+);
+#endif
+
 VOID
 NTAPI
 UniataInitSyncBaseIO(

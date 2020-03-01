@@ -2248,6 +2248,13 @@ AtapiFindIsaController(
     PIDE_REGISTERS_1 BaseIoAddress1;
     PIDE_REGISTERS_2 BaseIoAddress2 = NULL;
 
+#if defined(__REACTOS__) && defined(SARCH_PC98)
+    // TODO: Check IO_WD# definitions, add secondary channel
+    static CONST ULONG AdapterAddresses[3] = {0x640, 0};
+    static CONST ULONG InterruptLevels[3] = {9, 0};
+
+    KdPrint2((PRINT_PREFIX "AtapiFindIsaController (C-Bus):\n"));
+#else
     // The following table specifies the ports to be checked when searching for
     // an IDE controller.  A zero entry terminates the search.
     static CONST ULONG AdapterAddresses[5] = {IO_WD1, IO_WD2, IO_WD1-8, IO_WD2-8, 0};
@@ -2258,6 +2265,7 @@ AtapiFindIsaController(
     static CONST ULONG InterruptLevels[5] = {14, 15, 11, 10, 0};
 
     KdPrint2((PRINT_PREFIX "AtapiFindIsaController (ISA):\n"));
+#endif
 
     if (!deviceExtension) {
         return SP_RETURN_ERROR;
@@ -2423,7 +2431,11 @@ next_adapter:
                 ioSpace = (PUCHAR)ScsiPortGetDeviceBase(HwDeviceExtension,
                                                 ConfigInfo->AdapterInterfaceType,
                                                 ConfigInfo->SystemIoBusNumber,
+#if defined(__REACTOS__) && defined(SARCH_PC98)
+                                                ScsiPortConvertUlongToPhysicalAddress((ULONGIO_PTR)BaseIoAddress1 + ATA_ALTOFFSET98),
+#else
                                                 ScsiPortConvertUlongToPhysicalAddress((ULONGIO_PTR)BaseIoAddress1 + ATA_ALTOFFSET),
+#endif
                                                 ATA_ALTIOSIZE,
                                                 TRUE);
             }
@@ -2435,7 +2447,11 @@ next_adapter:
             KdPrint2((PRINT_PREFIX "  expected InterruptLevel=%x\n", InterruptLevels[*adapterCount - 1]));
         }
 
+#if defined(__REACTOS__) && defined(SARCH_PC98)
+        UniataInitMapBasePc98(chan, BaseIoAddress1, BaseIoAddress2);
+#else
         UniataInitMapBase(chan, BaseIoAddress1, BaseIoAddress2);
+#endif
         UniataInitMapBM(deviceExtension, 0, FALSE);
 
 #ifdef _DEBUG

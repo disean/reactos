@@ -75,8 +75,14 @@ Licence:
 #define RETRY_PIO                       3
 
 
+#if defined(__REACTOS__) && defined(SARCH_PC98)
+#define	IO_WD1          0x640       /* Primary/Secondary Fixed Disk Controller */
+#define	IO_WD2          0x170       // TODO
+#define ATA_ALTOFFSET98 0x10C       /* Alternate registers offset */
+#else
 #define	IO_WD1	        0x1F0		/* Primary Fixed Disk Controller */
 #define	IO_WD2	        0x170		/* Secondary Fixed Disk Controller */
+#endif
 #define IP_PC98_BANK    0x432
 #define	IO_FLOPPY_INT	0x3F6		/* AltStatus inside Floppy I/O range */
 

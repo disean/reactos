@@ -2797,6 +2797,29 @@ UniataInitMapBase(
     return;
 } // end UniataInitMapBase()
 
+#if defined(__REACTOS__) && defined(SARCH_PC98)
+VOID
+NTAPI
+UniataInitMapBasePc98(
+    IN PHW_CHANNEL chan,
+    IN PIDE_REGISTERS_1 BaseIoAddress1,
+    IN PIDE_REGISTERS_2 BaseIoAddress2
+    )
+{
+    ULONG i;
+
+    for (i=0; i<IDX_IO1_SZ; i++) {
+        UniataInitIoRes(chan, IDX_IO1+i, BaseIoAddress1 ? ((ULONGIO_PTR)BaseIoAddress1 + i * 2) : 0, FALSE, FALSE);
+    }
+    
+    for (i=0; i<IDX_IO2_SZ; i++) {
+        UniataInitIoRes(chan, IDX_IO2+i, BaseIoAddress2 ? ((ULONGIO_PTR)BaseIoAddress2 + i * 2) : 0, FALSE, FALSE);
+    }
+    
+    UniataInitSyncBaseIO(chan);
+}
+#endif
+
 VOID
 NTAPI
 UniataInitSyncBaseIO(
