@@ -16,6 +16,9 @@ DBG_DEFAULT_CHANNEL(HWDETECT);
 
 BOOLEAN HiResoMachine;
 
+extern VOID
+RunTests(VOID);
+
 /* FUNCTIONS ******************************************************************/
 
 VOID
@@ -160,4 +163,12 @@ MachInit(const char *CmdLine)
 
     HalpCalibrateStallExecution();
     Pc98VideoInit();
+
+    RunTests();
+
+    _disable();
+    __halt();
+
+    while (TRUE)
+        NOTHING;
 }

@@ -28,7 +28,7 @@ GET_HARDDISK_CONFIG_DATA GetHarddiskConfigurationData = NULL;
 #define PRECISION    8
 #define HZ           100
 
-static unsigned int delay_count = 1;
+unsigned int delay_count = 1;
 
 PCHAR
 GetHarddiskIdentifier(UCHAR DriveNumber);

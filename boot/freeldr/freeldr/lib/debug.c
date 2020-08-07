@@ -22,13 +22,13 @@
 
 #if DBG && !defined(_M_ARM)
 
-// #define DEBUG_ALL
+#define DEBUG_ALL
 // #define DEBUG_WARN
 // #define DEBUG_ERR
 // #define DEBUG_INIFILE
 // #define DEBUG_REACTOS
 // #define DEBUG_CUSTOM
-#define DEBUG_NONE
+// #define DEBUG_NONE
 
 #define DBG_DEFAULT_LEVELS (ERR_LEVEL|FIXME_LEVEL)
 
@@ -191,7 +191,7 @@ Done:
     /* Try to initialize the port; if it fails, remove the corresponding flag */
     if (DebugPort & RS232)
     {
-        if (!Rs232PortInitialize(ComPort, BaudRate))
+        // if (!Rs232PortInitialize(ComPort, BaudRate))
             DebugPort &= ~RS232;
     }
 }
@@ -263,24 +263,6 @@ DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, .
     /* Print the header if we have started a new line */
     if (DebugStartOfLine)
     {
-        DbgPrint("(%s:%lu) ", File, Line);
-
-        switch (Level)
-        {
-            case ERR_LEVEL:
-                DbgPrint("err: ");
-                break;
-            case FIXME_LEVEL:
-                DbgPrint("fixme: ");
-                break;
-            case WARN_LEVEL:
-                DbgPrint("warn: ");
-                break;
-            case TRACE_LEVEL:
-                DbgPrint("trace: ");
-                break;
-        }
-
         DebugStartOfLine = FALSE;
     }
 
@@ -314,17 +296,23 @@ DebugDumpBuffer(ULONG Mask, PVOID Buffer, ULONG Length)
         DebugStartOfLine = FALSE;
 
         /* Print the offset */
-        DbgPrint("%04x:\t", Offset);
+        DbgPrint("%04X:\t", Offset);
 
         /* Print either 16 or the remaining number of bytes */
         Count = min(Length - Offset, 16);
         for (i = 0; i < Count; i++, Offset++)
         {
-            DbgPrint("%02x%c", BufPtr[Offset], (i == 7) ? '-' : ' ');
+            DbgPrint("%02X%c", BufPtr[Offset], (i == 7) ? '-' : ' ');
         }
 
         DbgPrint("\n");
     }
+}
+
+VOID
+DebugEnableScreenPort(VOID)
+{
+    DebugPort |= SCREEN;
 }
 
 VOID

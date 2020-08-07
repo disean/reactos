@@ -155,6 +155,9 @@ if(ARCH STREQUAL "i386")
             arch/i386/pc98/pc98mem.c
             arch/i386/pc98/pc98rtc.c
             arch/i386/pc98/pc98video.c)
+
+        list(APPEND FREELDR_ARC_SOURCE
+            arch/i386/pc98/tests/tests.c)
     else()
         list(APPEND FREELDR_ARC_SOURCE
             arch/i386/pc/machpc.c

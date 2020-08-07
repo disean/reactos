@@ -71,4 +71,6 @@ ULONG __cdecl PnpBiosGetDeviceNode(UCHAR *NodeId,
 /* i386pxe.S */
 USHORT __cdecl PxeCallApi(USHORT Segment, USHORT Offset, USHORT Service, VOID* Parameter);
 
+ULONG __cdecl GetArticTicks(VOID);
+
 /* EOF */

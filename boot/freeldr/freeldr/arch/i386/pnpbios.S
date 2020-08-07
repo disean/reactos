@@ -132,6 +132,25 @@ _PnpBiosGetDeviceNodeCount:
 
     ret
 
+PUBLIC _GetArticTicks
+_GetArticTicks:
+
+    push edx
+
+    xor eax, eax
+    in ax, HEX(5C)
+    mov dx, ax
+
+    REPEAT 1000
+        out HEX(5F), al
+    ENDR
+
+    in ax, HEX(5C)
+    sub ax, dx
+
+    pop edx
+
+    ret
 
 /*
  * U32 PnpBiosGetDeviceNode(U8 *NodeId, U8 *NodeBuffer);

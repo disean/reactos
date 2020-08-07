@@ -60,6 +60,12 @@ Pc98ConsPutChar(int Ch)
     ++CursorPosition;
 }
 
+VOID
+Pc98ConsSetCursorPosition(UCHAR X, UCHAR Y)
+{
+    CursorPosition = X + Y * TextCols;
+}
+
 BOOLEAN
 Pc98ConsKbHit(VOID)
 {

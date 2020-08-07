@@ -58,6 +58,7 @@
 VOID Pc98Beep(VOID);
 
 VOID Pc98ConsPutChar(int Ch);
+VOID Pc98ConsSetCursorPosition(UCHAR X, UCHAR Y);
 BOOLEAN Pc98ConsKbHit(VOID);
 int Pc98ConsGetCh(VOID);
 

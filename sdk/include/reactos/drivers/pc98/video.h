@@ -159,8 +159,8 @@ FORCEINLINE
 VOID
 WRITE_GDC_CSRW(PUCHAR Port, PCSRWPARAM CursorParameters)
 {
-    ASSERT(CursorParameters->CursorAddress < 0xF00000);
-    ASSERT(CursorParameters->DotAddress < 0x10);
+    // ASSERT(CursorParameters->CursorAddress < 0xF00000);
+    // ASSERT(CursorParameters->DotAddress < 0x10);
 
     WRITE_PORT_UCHAR(Port, CursorParameters->CursorAddress & 0xFF);
     WRITE_PORT_UCHAR(Port, (CursorParameters->CursorAddress >> 8) & 0xFF);
