@@ -329,7 +329,7 @@ PciIdeXFdoQueryBusRelations(
 	ASSERT(DeviceExtension);
 	ASSERT(DeviceExtension->Common.IsFDO);
 
-	for (i = 0; i < MAX_IDE_CHANNEL; i++)
+	for (i = 0; i < 1; i++)
 	{
 		if (DeviceExtension->Pdo[i])
 		{
@@ -385,7 +385,7 @@ PciIdeXFdoQueryBusRelations(
 		return STATUS_INSUFFICIENT_RESOURCES;
 
 	DeviceRelations->Count = PDOs;
-	for (i = 0, j = 0; i < MAX_IDE_CHANNEL; i++)
+	for (i = 0, j = 0; i < 1; i++)
 	{
 		if (DeviceExtension->Pdo[i])
 		{
