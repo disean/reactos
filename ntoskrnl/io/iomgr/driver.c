@@ -324,8 +324,8 @@ IopQueryServiceSettings(
     Status = IopOpenRegistryKeyEx(&ServiceKey, CCSKey, ServiceName, KEY_READ);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT1("IopOpenRegistryKeyEx() failed for '%wZ' with status 0x%lx\n",
-                ServiceName, Status);
+        // DPRINT1("IopOpenRegistryKeyEx() failed for '%wZ' with status 0x%lx\n",
+                // ServiceName, Status);
         ZwClose(CCSKey);
         return Status;
     }
