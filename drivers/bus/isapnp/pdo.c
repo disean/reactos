@@ -52,8 +52,9 @@ IsaPdoQueryCapabilities(
     _In_ PIO_STACK_LOCATION IrpSp)
 {
     PDEVICE_CAPABILITIES DeviceCapabilities;
-    PISAPNP_LOGICAL_DEVICE LogDev = PdoExt->IsaPnpDevice;
     ULONG i;
+
+    UNREFERENCED_PARAMETER(Irp);
 
     PAGED_CODE();
 
@@ -61,14 +62,11 @@ IsaPdoQueryCapabilities(
     if (DeviceCapabilities->Version != 1)
         return STATUS_REVISION_MISMATCH;
 
-    if (LogDev)
+    DeviceCapabilities->UniqueID = TRUE;
+
+    if (PdoExt->FdoExt->ReadPortPdo &&
+        PdoExt->Common.Self == PdoExt->FdoExt->ReadPortPdo)
     {
-        DeviceCapabilities->UniqueID = TRUE;
-        DeviceCapabilities->Address = LogDev->CSN;
-    }
-    else
-    {
-        DeviceCapabilities->UniqueID = FALSE;
         DeviceCapabilities->RawDeviceOK = TRUE;
         DeviceCapabilities->SilentInstall = TRUE;
     }
