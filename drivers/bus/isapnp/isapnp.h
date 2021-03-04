@@ -65,6 +65,7 @@ typedef struct _ISAPNP_FDO_EXTENSION
     PDEVICE_OBJECT Ldo;
     PDEVICE_OBJECT Pdo;
     PDEVICE_OBJECT ReadPortPdo;
+    ULONG BusNumber;
     KEVENT DeviceSyncEvent;
     LIST_ENTRY DeviceListHead;
     ULONG DeviceCount;
