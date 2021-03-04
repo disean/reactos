@@ -12,6 +12,11 @@ extern "C" {
 
 #define TAG_ISAPNP 'pasI'
 
+#define ISAPNP_MAX_RESOURCEDATA 0x1000
+
+/** @brief Maximum number of Start DF tags supported by the driver. */
+#define ISAPNP_MAX_ALTERNATIVES 8
+
 typedef enum
 {
     dsStopped,
@@ -37,16 +42,71 @@ typedef struct _ISAPNP_DMA
     ISAPNP_DMA_DESCRIPTION Description;
 } ISAPNP_DMA, *PISAPNP_DMA;
 
+typedef struct _ISAPNP_MEMRANGE
+{
+    ULONG CurrentBase;
+    ULONG CurrentLength;
+    ISAPNP_MEMRANGE_DESCRIPTION Description;
+} ISAPNP_MEMRANGE, *PISAPNP_MEMRANGE;
+
+typedef struct _ISAPNP_MEMRANGE32
+{
+    ULONG CurrentBase;
+    ULONG CurrentLength;
+    ISAPNP_MEMRANGE32_DESCRIPTION Description;
+} ISAPNP_MEMRANGE32, *PISAPNP_MEMRANGE32;
+
+typedef struct _ISAPNP_COMPATIBLE_ID_ENTRY
+{
+    UCHAR VendorId[3];
+    USHORT ProdId;
+    LIST_ENTRY IdLink;
+} ISAPNP_COMPATIBLE_ID_ENTRY, *PISAPNP_COMPATIBLE_ID_ENTRY;
+
+typedef struct _ISAPNP_ALTERNATIVES
+{
+    ISAPNP_IO_DESCRIPTION Io[ISAPNP_MAX_ALTERNATIVES];
+    ISAPNP_IRQ_DESCRIPTION Irq[ISAPNP_MAX_ALTERNATIVES];
+    ISAPNP_DMA_DESCRIPTION Dma[ISAPNP_MAX_ALTERNATIVES];
+    ISAPNP_MEMRANGE_DESCRIPTION MemRange[ISAPNP_MAX_ALTERNATIVES];
+    ISAPNP_MEMRANGE32_DESCRIPTION MemRange32[ISAPNP_MAX_ALTERNATIVES];
+    UCHAR Priority[ISAPNP_MAX_ALTERNATIVES];
+
+    _Field_range_(0, ISAPNP_MAX_ALTERNATIVES)
+    UCHAR Count;
+} ISAPNP_ALTERNATIVES, *PISAPNP_ALTERNATIVES;
+
 typedef struct _ISAPNP_LOGICAL_DEVICE
 {
     PDEVICE_OBJECT Pdo;
-    ISAPNP_LOGDEVID LogDevId;
+
+    /**
+     * @brief The CSN data.
+     * @{
+     */
     UCHAR VendorId[3];
     USHORT ProdId;
     ULONG SerialNumber;
+    /**@}*/
+
+    /**
+     * @brief The LDN data.
+     * @{
+     */
+    UCHAR LogVendorId[3];
+    USHORT LogProdId;
+    ISAPNP_LOGDEVID LogDevId;
+    LIST_ENTRY CompatibleIdList;
+    PSTR FriendlyName;
+    PISAPNP_ALTERNATIVES Alternatives;
+
     ISAPNP_IO Io[8];
     ISAPNP_IRQ Irq[2];
     ISAPNP_DMA Dma[2];
+    ISAPNP_MEMRANGE MemRange[4];
+    ISAPNP_MEMRANGE32 MemRange32[4];
+    /**@}*/
+
     UCHAR CSN;
     UCHAR LDN;
 
@@ -82,6 +142,7 @@ typedef struct _ISAPNP_FDO_EXTENSION
 
     PDRIVER_OBJECT DriverObject;
     PUCHAR ReadDataPort;
+    ULONG Cards;
     LIST_ENTRY BusLink;
 } ISAPNP_FDO_EXTENSION, *PISAPNP_FDO_EXTENSION;
 
@@ -178,7 +239,7 @@ IsaPnpRemoveLogicalDevice(
     _In_ PDEVICE_OBJECT Pdo);
 
 /* hardware.c */
-NTSTATUS
+ULONG
 IsaHwTryReadDataPort(
     _In_ PUCHAR ReadDataPort);
 

@@ -83,6 +83,8 @@ extern "C" {
 #define ISAPNP_TAG_RSVDLONGF 0xFF
 #define ISAPNP_TAG_PSEUDO_NEWBOARD 0x100
 
+#include <pshpack1.h>
+
 typedef struct _ISAPNP_IDENTIFIER
 {
     USHORT VendorId;
@@ -98,14 +100,18 @@ typedef struct _ISAPNP_LOGDEVID
     USHORT Flags;
 } ISAPNP_LOGDEVID, *PISAPNP_LOGDEVID;
 
+typedef struct _ISAPNP_COMPATID
+{
+    USHORT VendorId;
+    USHORT ProdId;
+} ISAPNP_COMPATID, *PISAPNP_COMPATID;
+
 typedef struct _ISAPNP_DEVICEID
 {
     CHAR* Name;
     USHORT VendorId;
     USHORT ProdId;
 } ISAPNP_DEVICEID, *PISAPNP_DEVICEID;
-
-#include <pshpack1.h>
 
 typedef struct _ISAPNP_IO_DESCRIPTION
 {
@@ -115,6 +121,12 @@ typedef struct _ISAPNP_IO_DESCRIPTION
     UCHAR Alignment;
     UCHAR Length;
 } ISAPNP_IO_DESCRIPTION, *PISAPNP_IO_DESCRIPTION;
+
+typedef struct _ISAPNP_FIXED_IO_DESCRIPTION
+{
+    USHORT IoBase;
+    UCHAR Length;
+} ISAPNP_FIXED_IO_DESCRIPTION, *PISAPNP_FIXED_IO_DESCRIPTION;
 
 typedef struct _ISAPNP_IRQ_DESCRIPTION
 {
@@ -127,6 +139,31 @@ typedef struct _ISAPNP_DMA_DESCRIPTION
     UCHAR Mask;
     UCHAR Information;
 } ISAPNP_DMA_DESCRIPTION, *PISAPNP_DMA_DESCRIPTION;
+
+typedef struct _ISAPNP_MEMRANGE_DESCRIPTION
+{
+    UCHAR Information;
+    USHORT Minimum;
+    USHORT Maximum;
+    USHORT Alignment;
+    USHORT Length;
+} ISAPNP_MEMRANGE_DESCRIPTION, *PISAPNP_MEMRANGE_DESCRIPTION;
+
+typedef struct _ISAPNP_MEMRANGE32_DESCRIPTION
+{
+    UCHAR Information;
+    ULONG Minimum;
+    ULONG Maximum;
+    ULONG Alignment;
+    ULONG Length;
+} ISAPNP_MEMRANGE32_DESCRIPTION, *PISAPNP_MEMRANGE32_DESCRIPTION;
+
+typedef struct _ISAPNP_FIXEDMEMRANGE_DESCRIPTION
+{
+    UCHAR Information;
+    ULONG MemoryBase;
+    ULONG Length;
+} ISAPNP_FIXEDMEMRANGE_DESCRIPTION, *PISAPNP_FIXEDMEMRANGE_DESCRIPTION;
 
 #include <poppack.h>
 
