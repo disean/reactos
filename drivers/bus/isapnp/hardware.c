@@ -80,6 +80,17 @@ ReadWord(
 
 static
 inline
+USHORT
+ReadDoubleWord(
+    _In_ PUCHAR ReadDataPort,
+    _In_ USHORT Address)
+{
+    return ((ReadWord(ReadDataPort, Address) << 8) |
+            (ReadWord(ReadDataPort, Address + 2)));
+}
+
+static
+inline
 VOID
 SetReadDataPort(
     _In_ PUCHAR ReadDataPort)
@@ -214,6 +225,46 @@ ReadDmaChannel(
     _In_ USHORT Index)
 {
     return ReadByte(ReadDataPort, ISAPNP_DMACHANNEL(Index));
+}
+
+static
+inline
+USHORT
+ReadMemoryBase(
+    _In_ PUCHAR ReadDataPort,
+    _In_range_(>=, 1) USHORT Index)
+{
+    return ReadWord(ReadDataPort, ISAPNP_MEMBASE(Index));
+}
+
+static
+inline
+USHORT
+ReadMemoryLimit(
+    _In_ PUCHAR ReadDataPort,
+    _In_range_(>=, 1) USHORT Index)
+{
+    return ReadWord(ReadDataPort, ISAPNP_MEMLIMIT(Index));
+}
+
+static
+inline
+USHORT
+ReadMemoryBase32(
+    _In_ PUCHAR ReadDataPort,
+    _In_range_(>=, 1) USHORT Index)
+{
+    return ReadDoubleWord(ReadDataPort, ISAPNP_MEMBASE32(Index));
+}
+
+static
+inline
+USHORT
+ReadMemoryLimit32(
+    _In_ PUCHAR ReadDataPort,
+    _In_range_(>=, 1) USHORT Index)
+{
+    return ReadDoubleWord(ReadDataPort, ISAPNP_MEMLIMIT32(Index));
 }
 
 static
@@ -1048,6 +1099,128 @@ SkipTag:
 
 static
 CODE_SEG("PAGE")
+NTSTATUS
+ReadCurrentResources(
+    _In_ PUCHAR ReadDataPort,
+    _Inout_ PISAPNP_LOGICAL_DEVICE LogDevice)
+{
+    ULONG i;
+    BOOLEAN IsUpperLimit;
+
+    PAGED_CODE();
+
+    DPRINT("%s for CSN %lu, LDN %lu\n", __FUNCTION__, LogDevice->CSN, LogDevice->LDN);
+
+    /* If the device is not activated we just report a NULL resourse list */
+    if (!(ReadByte(ReadDataPort, ISAPNP_ACTIVATE) & 1))
+    {
+        LogDevice->Flags &= ~ISAPNP_HAS_RESOURCES;
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(LogDevice->Io); i++)
+    {
+        LogDevice->Io[i].CurrentBase = ReadIoBase(ReadDataPort, i);
+
+        /* The next descriptors are empty */
+        if (!LogDevice->Io[i].CurrentBase)
+            break;
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(LogDevice->Irq); i++)
+    {
+        LogDevice->Irq[i].CurrentNo = ReadIrqNo(ReadDataPort, i);
+
+        if (!LogDevice->Irq[i].CurrentNo)
+            break;
+
+        LogDevice->Irq[i].CurrentType = ReadIrqType(ReadDataPort, i);
+    }
+
+    for (i = 0; i < RTL_NUMBER_OF(LogDevice->Dma); i++)
+    {
+        LogDevice->Dma[i].CurrentChannel = ReadDmaChannel(ReadDataPort, i);
+
+        if (!LogDevice->Dma[i].CurrentChannel)
+            break;
+    }
+
+    IsUpperLimit = ReadByte(ReadDataPort, ISAPNP_MEMORYCONTROL) & 1;
+
+    for (i = 0; i < RTL_NUMBER_OF(LogDevice->MemRange); i++)
+    {
+        /* Handle register gap */
+        if (i == 0)
+        {
+            LogDevice->MemRange[i].CurrentBase = ReadWord(ReadDataPort, 0x40) << 8;
+
+            if (!LogDevice->MemRange[i].CurrentBase)
+                break;
+
+            LogDevice->MemRange[i].CurrentLength = ReadWord(ReadDataPort, 0x43) << 8;
+        }
+        else
+        {
+            LogDevice->MemRange[i].CurrentBase = ReadMemoryBase(ReadDataPort, i) << 8;
+
+            if (!LogDevice->MemRange[i].CurrentBase)
+                break;
+
+            LogDevice->MemRange[i].CurrentLength = ReadMemoryLimit(ReadDataPort, i) << 8;
+        }
+
+        if (IsUpperLimit)
+        {
+            LogDevice->MemRange[i].CurrentLength -= LogDevice->MemRange[i].CurrentBase;
+        }
+        else
+        {
+            LogDevice->MemRange[i].CurrentLength =
+                ~(LogDevice->MemRange[i].CurrentLength + 1) & 0xFFFFFF;
+        }
+    }
+
+    IsUpperLimit = ReadByte(ReadDataPort, ISAPNP_MEMORYCONTROL32) & 1;
+
+    for (i = 0; i < RTL_NUMBER_OF(LogDevice->MemRange32); i++)
+    {
+        /* Handle register gap */
+        if (i == 0)
+        {
+            LogDevice->MemRange32[i].CurrentBase = ReadDoubleWord(ReadDataPort, 0x76);
+
+            if (!LogDevice->MemRange32[i].CurrentBase)
+                break;
+
+            LogDevice->MemRange32[i].CurrentLength = ReadDoubleWord(ReadDataPort, 0x7B);
+        }
+        else
+        {
+            LogDevice->MemRange32[i].CurrentBase = ReadMemoryBase32(ReadDataPort, i);
+
+            if (!LogDevice->MemRange32[i].CurrentBase)
+                break;
+
+            LogDevice->MemRange32[i].CurrentLength = ReadMemoryLimit32(ReadDataPort, i);
+        }
+
+        if (IsUpperLimit)
+        {
+            LogDevice->MemRange32[i].CurrentLength -= LogDevice->MemRange32[i].CurrentBase;
+        }
+        else
+        {
+            LogDevice->MemRange32[i].CurrentLength =
+                ~(LogDevice->MemRange32[i].CurrentLength + 1) & 0xFFFFFF;
+        }
+    }
+
+    LogDevice->Flags |= ISAPNP_HAS_RESOURCES;
+    return STATUS_SUCCESS;
+}
+
+static
+CODE_SEG("PAGE")
 INT
 TryIsolate(
     _In_ PUCHAR ReadDataPort)
@@ -1184,7 +1357,6 @@ ProbeIsaPnpBus(
 {
     PISAPNP_LOGICAL_DEVICE LogDevice;
     USHORT Csn;
-    ULONG i;
     PLIST_ENTRY Entry;
     PUCHAR ResourceData;
 
@@ -1279,16 +1451,10 @@ ProbeIsaPnpBus(
 
             WriteLogicalDeviceNumber(LogDev);
 
-            for (i = 0; i < ARRAYSIZE(LogDevice->Io); i++)
-                LogDevice->Io[i].CurrentBase = ReadIoBase(FdoExt->ReadDataPort, i);
-            for (i = 0; i < ARRAYSIZE(LogDevice->Irq); i++)
+            Status = ReadCurrentResources(FdoExt->ReadDataPort, LogDevice);
+            if (!NT_SUCCESS(Status))
             {
-                LogDevice->Irq[i].CurrentNo = ReadIrqNo(FdoExt->ReadDataPort, i);
-                LogDevice->Irq[i].CurrentType = ReadIrqType(FdoExt->ReadDataPort, i);
-            }
-            for (i = 0; i < ARRAYSIZE(LogDevice->Dma); i++)
-            {
-                LogDevice->Dma[i].CurrentChannel = ReadDmaChannel(FdoExt->ReadDataPort, i);
+                DPRINT("Unable to read resources with status 0x%08lx\n", Status);
             }
 
             IsaPnpExtractAscii(LogDevice->VendorId, Identifier.VendorId);

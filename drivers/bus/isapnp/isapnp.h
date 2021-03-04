@@ -112,6 +112,7 @@ typedef struct _ISAPNP_LOGICAL_DEVICE
 
     ULONG Flags;
 #define ISAPNP_PRESENT       0x00000001 /**< Cleared when the device is physically removed. */
+#define ISAPNP_HAS_RESOURCES 0x00000002 /**< Cleared when the device has no assigned resources. */
 
     LIST_ENTRY DeviceLink;
 } ISAPNP_LOGICAL_DEVICE, *PISAPNP_LOGICAL_DEVICE;

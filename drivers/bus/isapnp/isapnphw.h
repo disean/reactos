@@ -26,6 +26,13 @@ extern "C" {
 
 #define ISAPNP_ACTIVATE 0x30
 #define ISAPNP_IORANGECHECK 0x31
+#define ISAPNP_MEMORYCONTROL 0x42
+#define ISAPNP_MEMORYCONTROL32 0x7A
+
+#define ISAPNP_MEMBASE(n) (0x40 + ((n) * 8)) /* For n >= 1 */
+#define ISAPNP_MEMLIMIT(n) (0x42 + ((n) * 8)) /* For n >= 1 */
+#define ISAPNP_MEMBASE32(n) (0x70 + ((n) * 16)) /* For n >= 1 */
+#define ISAPNP_MEMLIMIT32(n) (0x74 + ((n) * 16)) /* For n >= 1 */
 
 #define ISAPNP_IOBASE(n) (0x60 + ((n)*2))
 #define ISAPNP_IRQNO(n) (0x70 + ((n)*2))

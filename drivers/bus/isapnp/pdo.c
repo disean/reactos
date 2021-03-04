@@ -447,6 +447,13 @@ IsaPdoQueryResources(
 
     PAGED_CODE();
 
+    if (PdoExt->IsaPnpDevice &&
+        !(PdoExt->IsaPnpDevice->Flags & ISAPNP_HAS_RESOURCES))
+    {
+        Irp->IoStatus.Information = 0;
+        return STATUS_SUCCESS;
+    }
+
     if (!PdoExt->ResourceList)
         return Irp->IoStatus.Status;
 
