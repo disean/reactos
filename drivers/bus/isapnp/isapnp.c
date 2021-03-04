@@ -137,8 +137,8 @@ IsaFdoCreateDeviceIDs(
 }
 
 static
+CODE_SEG("PAGE")
 NTSTATUS
-NTAPI
 IsaFdoCreateRequirements(
     _In_ PISAPNP_PDO_EXTENSION PdoExt)
 {
@@ -152,6 +152,8 @@ IsaFdoCreateRequirements(
     BOOLEAN FirstIrq = TRUE, FirstDma = TRUE;
     PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList;
     PIO_RESOURCE_DESCRIPTOR Descriptor;
+
+    PAGED_CODE();
 
     /* Count number of requirements */
     for (i = 0; i < RTL_NUMBER_OF(LogDev->Io); i++)
@@ -306,8 +308,8 @@ IsaFdoCreateRequirements(
 }
 
 static
+CODE_SEG("PAGE")
 NTSTATUS
-NTAPI
 IsaFdoCreateResources(
     _In_ PISAPNP_PDO_EXTENSION PdoExt)
 {
@@ -316,6 +318,8 @@ IsaFdoCreateResources(
     ULONG ListSize, i;
     PCM_RESOURCE_LIST ResourceList;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+
+    PAGED_CODE();
 
     /* Count number of required resources */
     for (i = 0; i < RTL_NUMBER_OF(LogDev->Io); i++)
@@ -420,8 +424,8 @@ IsaFdoCreateResources(
     return STATUS_SUCCESS;
 }
 
+CODE_SEG("PAGE")
 NTSTATUS
-NTAPI
 IsaPnpFillDeviceRelations(
     _In_ PISAPNP_FDO_EXTENSION FdoExt,
     _Inout_ PIRP Irp,
@@ -433,6 +437,8 @@ IsaPnpFillDeviceRelations(
     PISAPNP_LOGICAL_DEVICE IsaDevice;
     PDEVICE_RELATIONS DeviceRelations;
     ULONG i = 0;
+
+    PAGED_CODE();
 
     DeviceRelations = ExAllocatePool(NonPagedPool,
                                      sizeof(DEVICE_RELATIONS) + sizeof(DEVICE_OBJECT) * FdoExt->DeviceCount);
@@ -552,15 +558,18 @@ IsaForwardIrpSynchronous(
     return Status;
 }
 
-static DRIVER_DISPATCH IsaCreateClose;
+static DRIVER_DISPATCH_PAGED IsaCreateClose;
 
 static
+CODE_SEG("PAGE")
 NTSTATUS
 NTAPI
 IsaCreateClose(
     _In_ PDEVICE_OBJECT DeviceObject,
     _Inout_ PIRP Irp)
 {
+    PAGED_CODE();
+
     Irp->IoStatus.Status = STATUS_SUCCESS;
     Irp->IoStatus.Information = FILE_OPENED;
 
@@ -619,8 +628,8 @@ IsaReadWrite(
 }
 
 static
+CODE_SEG("PAGE")
 NTSTATUS
-NTAPI
 IsaPnpCreateReadPortDORequirements(
     _In_ PISAPNP_PDO_EXTENSION PdoExt)
 {
@@ -629,6 +638,8 @@ IsaPnpCreateReadPortDORequirements(
     ULONG ListSize, i;
     PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList;
     PIO_RESOURCE_DESCRIPTOR Descriptor;
+
+    PAGED_CODE();
 
     ListSize = sizeof(IO_RESOURCE_REQUIREMENTS_LIST)
                + 2 * RTL_NUMBER_OF(Ports) * sizeof(IO_RESOURCE_DESCRIPTOR);
@@ -669,8 +680,8 @@ IsaPnpCreateReadPortDORequirements(
 }
 
 static
+CODE_SEG("PAGE")
 NTSTATUS
-NTAPI
 IsaPnpCreateReadPortDOResources(
     _In_ PISAPNP_PDO_EXTENSION PdoExt)
 {
@@ -678,6 +689,8 @@ IsaPnpCreateReadPortDOResources(
     ULONG ListSize, i;
     PCM_RESOURCE_LIST ResourceList;
     PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+
+    PAGED_CODE();
 
     ListSize = sizeof(CM_RESOURCE_LIST)
                + (RTL_NUMBER_OF(Ports) - 1) * sizeof(CM_PARTIAL_RESOURCE_DESCRIPTOR);
@@ -707,8 +720,8 @@ IsaPnpCreateReadPortDOResources(
 }
 
 static
+CODE_SEG("PAGE")
 NTSTATUS
-NTAPI
 IsaPnpCreateReadPortDO(
     _In_ PISAPNP_FDO_EXTENSION FdoExt)
 {
@@ -718,6 +731,8 @@ IsaPnpCreateReadPortDO(
     UNICODE_STRING InstanceID = RTL_CONSTANT_STRING(L"0\0");
     PISAPNP_PDO_EXTENSION PdoExt;
     NTSTATUS Status;
+
+    PAGED_CODE();
 
     Status = IoCreateDevice(FdoExt->DriverObject,
                             sizeof(ISAPNP_PDO_EXTENSION),
@@ -771,7 +786,10 @@ IsaPnpCreateReadPortDO(
     return Status;
 }
 
+static DRIVER_ADD_DEVICE IsaAddDevice;
+
 static
+CODE_SEG("PAGE")
 NTSTATUS
 NTAPI
 IsaAddDevice(
@@ -781,6 +799,8 @@ IsaAddDevice(
     PDEVICE_OBJECT Fdo;
     PISAPNP_FDO_EXTENSION FdoExt;
     NTSTATUS Status;
+
+    PAGED_CODE();
 
     DPRINT("%s(%p, %p)\n", __FUNCTION__, DriverObject, PhysicalDeviceObject);
 
@@ -809,7 +829,7 @@ IsaAddDevice(
                                               PhysicalDeviceObject);
 
     InitializeListHead(&FdoExt->DeviceListHead);
-    KeInitializeSpinLock(&FdoExt->Lock);
+    KeInitializeEvent(&FdoExt->DeviceSyncEvent, SynchronizationEvent, TRUE);
 
     Status = IsaPnpCreateReadPortDO(FdoExt);
     if (!NT_SUCCESS(Status))
@@ -821,8 +841,9 @@ IsaAddDevice(
     return STATUS_SUCCESS;
 }
 
-DRIVER_DISPATCH IsaPower;
+static DRIVER_DISPATCH_RAISED IsaPower;
 
+static
 NTSTATUS
 NTAPI
 IsaPower(
@@ -844,9 +865,10 @@ IsaPower(
     return PoCallDriver(((PISAPNP_FDO_EXTENSION)DevExt)->Ldo, Irp);
 }
 
-static DRIVER_DISPATCH IsaPnp;
+static DRIVER_DISPATCH_PAGED IsaPnp;
 
 static
+CODE_SEG("PAGE")
 NTSTATUS
 NTAPI
 IsaPnp(
@@ -856,6 +878,8 @@ IsaPnp(
     PIO_STACK_LOCATION IrpSp = IoGetCurrentIrpStackLocation(Irp);
     PISAPNP_COMMON_EXTENSION DevExt = DeviceObject->DeviceExtension;
 
+    PAGED_CODE();
+
     DPRINT("%s(%p, %p)\n", __FUNCTION__, DeviceObject, Irp);
 
     if (DevExt->IsFdo)
@@ -864,6 +888,7 @@ IsaPnp(
         return IsaPdoPnp((PISAPNP_PDO_EXTENSION)DevExt, Irp, IrpSp);
 }
 
+CODE_SEG("INIT")
 NTSTATUS
 NTAPI
 DriverEntry(
