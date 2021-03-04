@@ -3,14 +3,27 @@
  * PURPOSE:         Driver entry
  * COPYRIGHT:       Copyright 2010 Cameron Gutman (cameron.gutman@reactos.org)
  *                  Copyright 2020 Hervé Poussineau (hpoussin@reactos.org)
+ *                  Copyright 2021 Dmitry Borisov (di.sean@protonmail.com)
  */
+
+/* INCLUDES *******************************************************************/
 
 #include <isapnp.h>
 
 #define NDEBUG
 #include <debug.h>
 
+/* GLOBALS ********************************************************************/
+
 BOOLEAN ReadPortCreated = FALSE;
+
+_Has_lock_kind_(_Lock_kind_event_)
+KEVENT BusSyncEvent;
+
+_Guarded_by_(BusSyncEvent)
+LIST_ENTRY BusListHead;
+
+/* FUNCTIONS ******************************************************************/
 
 static
 CODE_SEG("PAGE")
@@ -300,49 +313,6 @@ IsaFdoCreateResources(
     return STATUS_SUCCESS;
 }
 
-static IO_COMPLETION_ROUTINE ForwardIrpCompletion;
-
-static
-NTSTATUS
-NTAPI
-ForwardIrpCompletion(
-    IN PDEVICE_OBJECT DeviceObject,
-    IN PIRP Irp,
-    IN PVOID Context)
-{
-    UNREFERENCED_PARAMETER(DeviceObject);
-
-    if (Irp->PendingReturned)
-        KeSetEvent((PKEVENT)Context, IO_NO_INCREMENT, FALSE);
-
-    return STATUS_MORE_PROCESSING_REQUIRED;
-}
-
-NTSTATUS
-NTAPI
-IsaForwardIrpSynchronous(
-    IN PISAPNP_FDO_EXTENSION FdoExt,
-    IN PIRP Irp)
-{
-    KEVENT Event;
-    NTSTATUS Status;
-
-    KeInitializeEvent(&Event, NotificationEvent, FALSE);
-    IoCopyCurrentIrpStackLocationToNext(Irp);
-
-    IoSetCompletionRoutine(Irp, ForwardIrpCompletion, &Event, TRUE, TRUE, TRUE);
-
-    Status = IoCallDriver(FdoExt->Ldo, Irp);
-    if (Status == STATUS_PENDING)
-    {
-        Status = KeWaitForSingleObject(&Event, Suspended, KernelMode, FALSE, NULL);
-        if (NT_SUCCESS(Status))
-            Status = Irp->IoStatus.Status;
-    }
-
-    return Status;
-}
-
 static DRIVER_DISPATCH_PAGED IsaCreateClose;
 
 static
@@ -356,7 +326,6 @@ IsaCreateClose(
     PAGED_CODE();
 
     Irp->IoStatus.Status = STATUS_SUCCESS;
-    Irp->IoStatus.Information = FILE_OPENED;
 
     DPRINT("%s(%p, %p)\n", __FUNCTION__, DeviceObject, Irp);
 
@@ -365,58 +334,42 @@ IsaCreateClose(
     return STATUS_SUCCESS;
 }
 
-static DRIVER_DISPATCH IsaIoctl;
-
-static
-NTSTATUS
-NTAPI
-IsaIoctl(
-    IN PDEVICE_OBJECT DeviceObject,
-    IN PIRP Irp)
-{
-    PIO_STACK_LOCATION IrpSp = IoGetCurrentIrpStackLocation(Irp);
-    NTSTATUS Status;
-
-    DPRINT("%s(%p, %p)\n", __FUNCTION__, DeviceObject, Irp);
-
-    switch (IrpSp->Parameters.DeviceIoControl.IoControlCode)
-    {
-        default:
-            DPRINT1("Unknown ioctl code: %x\n", IrpSp->Parameters.DeviceIoControl.IoControlCode);
-            Status = STATUS_NOT_SUPPORTED;
-            break;
-    }
-
-    Irp->IoStatus.Status = Status;
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return Status;
-}
-
-static DRIVER_DISPATCH IsaReadWrite;
-
-static
-NTSTATUS
-NTAPI
-IsaReadWrite(
-    IN PDEVICE_OBJECT DeviceObject,
-    IN PIRP Irp)
-{
-    DPRINT("%s(%p, %p)\n", __FUNCTION__, DeviceObject, Irp);
-
-    Irp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-    Irp->IoStatus.Information = 0;
-
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-
-    return STATUS_NOT_SUPPORTED;
-}
+static DRIVER_DISPATCH_PAGED IsaForwardOrIgnore;
 
 static
 CODE_SEG("PAGE")
 NTSTATUS
+NTAPI
+IsaForwardOrIgnore(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
+{
+    PISAPNP_COMMON_EXTENSION CommonExt = DeviceObject->DeviceExtension;
+
+    PAGED_CODE();
+
+    DPRINT("%s(%p, %p) Minor - %X\n", __FUNCTION__, DeviceObject, Irp,
+           IoGetCurrentIrpStackLocation(Irp)->MinorFunction);
+
+    if (CommonExt->IsFdo)
+    {
+        IoSkipCurrentIrpStackLocation(Irp);
+        return IoCallDriver(((PISAPNP_FDO_EXTENSION)CommonExt)->Ldo, Irp);
+    }
+    else
+    {
+        NTSTATUS Status = Irp->IoStatus.Status;
+
+        IoCompleteRequest(Irp, IO_NO_INCREMENT);
+        return Status;
+    }
+}
+
+CODE_SEG("PAGE")
+NTSTATUS
 IsaPnpCreateReadPortDORequirements(
-    _In_ PISAPNP_PDO_EXTENSION PdoExt)
+    _In_ PISAPNP_PDO_EXTENSION PdoExt,
+    _In_opt_ USHORT SelectedPort)
 {
     const USHORT Ports[] = { ISAPNP_WRITE_DATA, ISAPNP_ADDRESS,
                              0x274, 0x3E4, 0x204, 0x2E4, 0x354, 0x2F4 };
@@ -426,8 +379,16 @@ IsaPnpCreateReadPortDORequirements(
 
     PAGED_CODE();
 
-    ListSize = sizeof(IO_RESOURCE_REQUIREMENTS_LIST)
-               + 2 * RTL_NUMBER_OF(Ports) * sizeof(IO_RESOURCE_DESCRIPTOR);
+    if (SelectedPort)
+    {
+        ListSize = sizeof(IO_RESOURCE_REQUIREMENTS_LIST)
+                   + (RTL_NUMBER_OF(Ports) + 2) * sizeof(IO_RESOURCE_DESCRIPTOR);
+    }
+    else
+    {
+        ListSize = sizeof(IO_RESOURCE_REQUIREMENTS_LIST)
+                   + 2 * RTL_NUMBER_OF(Ports) * sizeof(IO_RESOURCE_DESCRIPTOR);
+    }
     RequirementsList = ExAllocatePoolZero(PagedPool, ListSize, TAG_ISAPNP);
     if (!RequirementsList)
         return STATUS_NO_MEMORY;
@@ -437,27 +398,77 @@ IsaPnpCreateReadPortDORequirements(
 
     RequirementsList->List[0].Version = 1;
     RequirementsList->List[0].Revision = 1;
-    RequirementsList->List[0].Count = 2 * RTL_NUMBER_OF(Ports);
+    if (SelectedPort)
+        RequirementsList->List[0].Count = RTL_NUMBER_OF(Ports) + 2;
+    else
+        RequirementsList->List[0].Count = 2 * RTL_NUMBER_OF(Ports);
 
-    for (i = 0; i < 2 * RTL_NUMBER_OF(Ports); i += 2)
+    if (SelectedPort)
     {
-        Descriptor = &RequirementsList->List[0].Descriptors[i];
+        ULONG j = 0;
 
-        /* Expected port */
-        Descriptor[0].Type = CmResourceTypePort;
-        Descriptor[0].ShareDisposition = CmResourceShareDeviceExclusive;
-        Descriptor[0].Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
-        Descriptor[0].u.Port.Length = Ports[i / 2] & 1 ? 0x01 : 0x04;
-        Descriptor[0].u.Port.Alignment = 0x01;
-        Descriptor[0].u.Port.MinimumAddress.LowPart = Ports[i / 2];
-        Descriptor[0].u.Port.MaximumAddress.LowPart = Ports[i / 2] + Descriptor[0].u.Port.Length - 1;
+        /* ISAPNP_WRITE_DATA and ISAPNP_ADDRESS */
+        for (i = 0; i < 2 * 2; i += 2, j += 2)
+        {
+            Descriptor = &RequirementsList->List[0].Descriptors[j];
 
-        /* ... but mark it as optional */
-        Descriptor[1].Option = IO_RESOURCE_ALTERNATIVE;
-        Descriptor[1].Type = CmResourceTypePort;
-        Descriptor[1].ShareDisposition = CmResourceShareDeviceExclusive;
-        Descriptor[1].Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
-        Descriptor[1].u.Port.Alignment = 0x01;
+            /* Expected port */
+            Descriptor[0].Type = CmResourceTypePort;
+            Descriptor[0].ShareDisposition = CmResourceShareDeviceExclusive;
+            Descriptor[0].Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
+            Descriptor[0].u.Port.Length = Ports[i / 2] & 1 ? 0x01 : 0x04;
+            Descriptor[0].u.Port.Alignment = 0x01;
+            Descriptor[0].u.Port.MinimumAddress.LowPart = Ports[i / 2];
+            Descriptor[0].u.Port.MaximumAddress.LowPart = Ports[i / 2] +
+                                                          Descriptor[0].u.Port.Length - 1;
+
+            /* ... but mark it as optional */
+            Descriptor[1].Option = IO_RESOURCE_ALTERNATIVE;
+            Descriptor[1].Type = CmResourceTypePort;
+            Descriptor[1].ShareDisposition = CmResourceShareDeviceExclusive;
+            Descriptor[1].Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
+            Descriptor[1].u.Port.Alignment = 0x01;
+        }
+
+        for (i = 2; i < RTL_NUMBER_OF(Ports); i++)
+        {
+            Descriptor = &RequirementsList->List[0].Descriptors[j++];
+
+            if (Ports[i] != SelectedPort)
+                Descriptor->Option = IO_RESOURCE_ALTERNATIVE;
+            Descriptor->Type = CmResourceTypePort;
+            Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+            Descriptor->Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
+            Descriptor->u.Port.Length = Ports[i] & 1 ? 0x01 : 0x04;
+            Descriptor->u.Port.Alignment = 0x01;
+            Descriptor->u.Port.MinimumAddress.LowPart = Ports[i];
+            Descriptor->u.Port.MaximumAddress.LowPart = Ports[i] +
+                                                        Descriptor->u.Port.Length - 1;
+        }
+    }
+    else
+    {
+        for (i = 0; i < 2 * RTL_NUMBER_OF(Ports); i += 2)
+        {
+            Descriptor = &RequirementsList->List[0].Descriptors[i];
+
+            /* Expected port */
+            Descriptor[0].Type = CmResourceTypePort;
+            Descriptor[0].ShareDisposition = CmResourceShareDeviceExclusive;
+            Descriptor[0].Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
+            Descriptor[0].u.Port.Length = Ports[i / 2] & 1 ? 0x01 : 0x04;
+            Descriptor[0].u.Port.Alignment = 0x01;
+            Descriptor[0].u.Port.MinimumAddress.LowPart = Ports[i / 2];
+            Descriptor[0].u.Port.MaximumAddress.LowPart = Ports[i / 2] +
+                                                          Descriptor[0].u.Port.Length - 1;
+
+            /* ... but mark it as optional */
+            Descriptor[1].Option = IO_RESOURCE_ALTERNATIVE;
+            Descriptor[1].Type = CmResourceTypePort;
+            Descriptor[1].ShareDisposition = CmResourceShareDeviceExclusive;
+            Descriptor[1].Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
+            Descriptor[1].u.Port.Alignment = 0x01;
+        }
     }
 
     PdoExt->RequirementsList = RequirementsList;
@@ -535,7 +546,7 @@ IsaPnpCreateReadPortDO(
     PdoExt->Common.State = dsStopped;
     PdoExt->FdoExt = FdoExt;
 
-    Status = IsaPnpCreateReadPortDORequirements(PdoExt);
+    Status = IsaPnpCreateReadPortDORequirements(PdoExt, 0);
     if (!NT_SUCCESS(Status))
         goto Failure;
 
@@ -548,15 +559,29 @@ IsaPnpCreateReadPortDO(
     return Status;
 
 Failure:
-    if (PdoExt->RequirementsList)
-        ExFreePoolWithTag(PdoExt->RequirementsList, TAG_ISAPNP);
-
-    if (PdoExt->ResourceList)
-        ExFreePoolWithTag(PdoExt->ResourceList, TAG_ISAPNP);
-
-    IoDeleteDevice(FdoExt->ReadPortPdo);
+    IsaPnpRemoveReadPortDO(FdoExt->ReadPortPdo);
 
     return Status;
+}
+
+CODE_SEG("PAGE")
+VOID
+IsaPnpRemoveReadPortDO(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    PISAPNP_PDO_EXTENSION ReadPortExt = Pdo->DeviceExtension;
+
+    PAGED_CODE();
+
+    DPRINT("Removing Read Port\n");
+
+    if (ReadPortExt->RequirementsList)
+        ExFreePoolWithTag(ReadPortExt->RequirementsList, TAG_ISAPNP);
+
+    if (ReadPortExt->ResourceList)
+        ExFreePoolWithTag(ReadPortExt->ResourceList, TAG_ISAPNP);
+
+    IoDeleteDevice(Pdo);
 }
 
 CODE_SEG("PAGE")
@@ -589,28 +614,50 @@ IsaPnpFillDeviceRelations(
     if (!FdoExt->ReadPortPdo)
         IncludeDataPort = FALSE;
 
+    IsaPnpAcquireDeviceDataLock(FdoExt);
+
     PdoCount = FdoExt->DeviceCount;
     if (IncludeDataPort)
         ++PdoCount;
+
+    CurrentEntry = FdoExt->DeviceListHead.Flink;
+    while (CurrentEntry != &FdoExt->DeviceListHead)
+    {
+        IsaDevice = CONTAINING_RECORD(CurrentEntry, ISAPNP_LOGICAL_DEVICE, DeviceLink);
+
+        if (!(IsaDevice->Flags & ISAPNP_PRESENT))
+            --PdoCount;
+
+        CurrentEntry = CurrentEntry->Flink;
+    }
 
     DeviceRelations = ExAllocatePoolWithTag(PagedPool,
                                             FIELD_OFFSET(DEVICE_RELATIONS, Objects[PdoCount]),
                                             TAG_ISAPNP);
     if (!DeviceRelations)
     {
+        IsaPnpReleaseDeviceDataLock(FdoExt);
         return STATUS_NO_MEMORY;
     }
 
     if (IncludeDataPort)
     {
+        PISAPNP_PDO_EXTENSION ReadPortExt = FdoExt->ReadPortPdo->DeviceExtension;
+
         DeviceRelations->Objects[i++] = FdoExt->ReadPortPdo;
         ObReferenceObject(FdoExt->ReadPortPdo);
+
+        /* The Read Port PDO can only be removed by FDO */
+        ReadPortExt->Flags |= ISAPNP_ENUMERATED;
     }
 
     CurrentEntry = FdoExt->DeviceListHead.Flink;
     while (CurrentEntry != &FdoExt->DeviceListHead)
     {
         IsaDevice = CONTAINING_RECORD(CurrentEntry, ISAPNP_LOGICAL_DEVICE, DeviceLink);
+
+        if (!(IsaDevice->Flags & ISAPNP_PRESENT))
+            goto SkipPdo;
 
         if (!IsaDevice->Pdo)
         {
@@ -622,18 +669,13 @@ IsaPnpFillDeviceRelations(
                                     FALSE,
                                     &IsaDevice->Pdo);
             if (!NT_SUCCESS(Status))
-            {
-                break;
-            }
+                goto SkipPdo;
 
             IsaDevice->Pdo->Flags &= ~DO_DEVICE_INITIALIZING;
-
-            //Device->Pdo->Flags |= DO_POWER_PAGABLE;
 
             PdoExt = IsaDevice->Pdo->DeviceExtension;
 
             RtlZeroMemory(PdoExt, sizeof(ISAPNP_PDO_EXTENSION));
-
             PdoExt->Common.IsFdo = FALSE;
             PdoExt->Common.Self = IsaDevice->Pdo;
             PdoExt->Common.State = dsStopped;
@@ -641,23 +683,43 @@ IsaPnpFillDeviceRelations(
             PdoExt->FdoExt = FdoExt;
 
             Status = IsaFdoCreateRequirements(PdoExt);
-
-            if (NT_SUCCESS(Status))
-                Status = IsaFdoCreateResources(PdoExt);
-
             if (!NT_SUCCESS(Status))
             {
-                IoDeleteDevice(IsaDevice->Pdo);
+                IsaPnpRemoveLogicalDevice(PdoExt->Common.Self);
                 IsaDevice->Pdo = NULL;
-                break;
+                goto SkipPdo;
+            }
+
+            Status = IsaFdoCreateResources(PdoExt);
+            if (!NT_SUCCESS(Status))
+            {
+                IsaPnpRemoveLogicalDevice(PdoExt->Common.Self);
+                IsaDevice->Pdo = NULL;
+                goto SkipPdo;
             }
         }
+        else
+        {
+            PdoExt = IsaDevice->Pdo->DeviceExtension;
+        }
         DeviceRelations->Objects[i++] = IsaDevice->Pdo;
-
         ObReferenceObject(IsaDevice->Pdo);
+
+        PdoExt->Flags |= ISAPNP_ENUMERATED;
+
+        CurrentEntry = CurrentEntry->Flink;
+        continue;
+
+SkipPdo:
+        PdoExt = IsaDevice->Pdo->DeviceExtension;
+
+        if (PdoExt)
+            PdoExt->Flags &= ~ISAPNP_ENUMERATED;
 
         CurrentEntry = CurrentEntry->Flink;
     }
+
+    IsaPnpReleaseDeviceDataLock(FdoExt);
 
     DeviceRelations->Count = i;
 
@@ -690,7 +752,7 @@ IsaAddDevice(
                             NULL,
                             FILE_DEVICE_BUS_EXTENDER,
                             FILE_DEVICE_SECURE_OPEN,
-                            TRUE,
+                            FALSE,
                             &Fdo);
     if (!NT_SUCCESS(Status))
     {
@@ -709,9 +771,18 @@ IsaAddDevice(
     FdoExt->Pdo = PhysicalDeviceObject;
     FdoExt->Ldo = IoAttachDeviceToDeviceStack(Fdo,
                                               PhysicalDeviceObject);
+    if (!FdoExt->Ldo)
+    {
+        IoDeleteDevice(Fdo);
+        return STATUS_DEVICE_REMOVED;
+    }
 
     InitializeListHead(&FdoExt->DeviceListHead);
     KeInitializeEvent(&FdoExt->DeviceSyncEvent, SynchronizationEvent, TRUE);
+
+    IsaPnpAcquireBusDataLock();
+    InsertTailList(&BusListHead, &FdoExt->BusLink);
+    IsaPnpReleaseBusDataLock();
 
     Fdo->Flags &= ~DO_DEVICE_INITIALIZING;
 
@@ -733,6 +804,7 @@ IsaPower(
     if (!DevExt->IsFdo)
     {
         Status = Irp->IoStatus.Status;
+        PoStartNextPowerIrp(Irp);
         IoCompleteRequest(Irp, IO_NO_INCREMENT);
         return Status;
     }
@@ -757,8 +829,6 @@ IsaPnp(
 
     PAGED_CODE();
 
-    DPRINT("%s(%p, %p)\n", __FUNCTION__, DeviceObject, Irp);
-
     if (DevExt->IsFdo)
         return IsaFdoPnp((PISAPNP_FDO_EXTENSION)DevExt, Irp, IrpSp);
     else
@@ -776,12 +846,14 @@ DriverEntry(
 
     DriverObject->MajorFunction[IRP_MJ_CREATE] = IsaCreateClose;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = IsaCreateClose;
-    DriverObject->MajorFunction[IRP_MJ_READ] = IsaReadWrite;
-    DriverObject->MajorFunction[IRP_MJ_WRITE] = IsaReadWrite;
-    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = IsaIoctl;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = IsaForwardOrIgnore;
+    DriverObject->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = IsaForwardOrIgnore;
     DriverObject->MajorFunction[IRP_MJ_PNP] = IsaPnp;
     DriverObject->MajorFunction[IRP_MJ_POWER] = IsaPower;
     DriverObject->DriverExtension->AddDevice = IsaAddDevice;
+
+    KeInitializeEvent(&BusSyncEvent, SynchronizationEvent, TRUE);
+    InitializeListHead(&BusListHead);
 
     return STATUS_SUCCESS;
 }

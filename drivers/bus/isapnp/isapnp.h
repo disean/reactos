@@ -49,6 +49,10 @@ typedef struct _ISAPNP_LOGICAL_DEVICE
     ISAPNP_DMA Dma[2];
     UCHAR CSN;
     UCHAR LDN;
+
+    ULONG Flags;
+#define ISAPNP_PRESENT       0x00000001 /**< Cleared when the device is physically removed. */
+
     LIST_ENTRY DeviceLink;
 } ISAPNP_LOGICAL_DEVICE, *PISAPNP_LOGICAL_DEVICE;
 
@@ -66,11 +70,19 @@ typedef struct _ISAPNP_FDO_EXTENSION
     PDEVICE_OBJECT Pdo;
     PDEVICE_OBJECT ReadPortPdo;
     ULONG BusNumber;
+
+    _Has_lock_kind_(_Lock_kind_event_)
     KEVENT DeviceSyncEvent;
+
+    _Guarded_by_(DeviceSyncEvent)
     LIST_ENTRY DeviceListHead;
+
+    _Guarded_by_(DeviceSyncEvent)
     ULONG DeviceCount;
+
     PDRIVER_OBJECT DriverObject;
     PUCHAR ReadDataPort;
+    LIST_ENTRY BusLink;
 } ISAPNP_FDO_EXTENSION, *PISAPNP_FDO_EXTENSION;
 
 typedef struct _ISAPNP_PDO_EXTENSION
@@ -81,7 +93,34 @@ typedef struct _ISAPNP_PDO_EXTENSION
     PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList;
     PCM_RESOURCE_LIST ResourceList;
     ULONG ResourceListSize;
+
+    ULONG Flags;
+#define ISAPNP_ENUMERATED               0x00000001 /**< Whether the device has been reported to the PnP manager. */
+#define ISAPNP_READ_PORT_NEED_REBALANCE 0x00000002
+
+    _Interlocked_
+    volatile LONG SpecialFiles;
 } ISAPNP_PDO_EXTENSION, *PISAPNP_PDO_EXTENSION;
+
+extern BOOLEAN ReadPortCreated;
+extern KEVENT BusSyncEvent;
+extern LIST_ENTRY BusListHead;
+
+_Acquires_lock_(BusSyncEvent)
+FORCEINLINE
+VOID
+IsaPnpAcquireBusDataLock(VOID)
+{
+    KeWaitForSingleObject(&BusSyncEvent, Executive, KernelMode, FALSE, NULL);
+}
+
+_Releases_lock_(BusSyncEvent)
+FORCEINLINE
+VOID
+IsaPnpReleaseBusDataLock(VOID)
+{
+    KeSetEvent(&BusSyncEvent, IO_NO_INCREMENT, FALSE);
+}
 
 _Acquires_lock_(*FdoExt->SyncEvent)
 FORCEINLINE
@@ -104,18 +143,21 @@ IsaPnpReleaseDeviceDataLock(
 /* isapnp.c */
 
 NTSTATUS
+IsaPnpCreateReadPortDORequirements(
+    _In_ PISAPNP_PDO_EXTENSION PdoExt,
+    _In_opt_ USHORT SelectedPort);
+
+VOID
+IsaPnpRemoveReadPortDO(
+    _In_ PDEVICE_OBJECT Pdo);
+
+NTSTATUS
 IsaPnpFillDeviceRelations(
     _In_ PISAPNP_FDO_EXTENSION FdoExt,
     _Inout_ PIRP Irp,
     _In_ BOOLEAN IncludeDataPort);
 
 DRIVER_INITIALIZE DriverEntry;
-
-NTSTATUS
-NTAPI
-IsaForwardIrpSynchronous(
-    _In_ PISAPNP_FDO_EXTENSION FdoExt,
-    _Inout_ PIRP Irp);
 
 /* fdo.c */
 NTSTATUS
@@ -130,6 +172,10 @@ IsaPdoPnp(
     _In_ PISAPNP_PDO_EXTENSION PdoDeviceExtension,
     _Inout_ PIRP Irp,
     _In_ PIO_STACK_LOCATION IrpSp);
+
+VOID
+IsaPnpRemoveLogicalDevice(
+    _In_ PDEVICE_OBJECT Pdo);
 
 /* hardware.c */
 NTSTATUS

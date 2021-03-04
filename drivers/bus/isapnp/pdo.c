@@ -3,6 +3,7 @@
  * PURPOSE:         PDO-specific code
  * COPYRIGHT:       Copyright 2010 Cameron Gutman (cameron.gutman@reactos.org)
  *                  Copyright 2020 Hervé Poussineau (hpoussin@reactos.org)
+ *                  Copyright 2021 Dmitry Borisov (di.sean@protonmail.com)
  */
 
 #include <isapnp.h>
@@ -86,13 +87,25 @@ CODE_SEG("PAGE")
 NTSTATUS
 IsaPdoQueryPnpDeviceState(
     _In_ PISAPNP_PDO_EXTENSION PdoExt,
-    _Inout_ PIRP Irp,
-    _In_ PIO_STACK_LOCATION IrpSp)
+    _Inout_ PIRP Irp)
 {
     PAGED_CODE();
 
-    Irp->IoStatus.Information |= PNP_DEVICE_NOT_DISABLEABLE;
-    return STATUS_SUCCESS;
+    if (PdoExt->Flags & ISAPNP_READ_PORT_NEED_REBALANCE)
+    {
+        Irp->IoStatus.Information |= PNP_DEVICE_NOT_DISABLEABLE |
+                                     PNP_DEVICE_RESOURCE_REQUIREMENTS_CHANGED |
+                                     PNP_DEVICE_FAILED;
+        return STATUS_SUCCESS;
+    }
+
+    if (PdoExt->SpecialFiles > 0)
+    {
+        Irp->IoStatus.Information |= PNP_DEVICE_NOT_DISABLEABLE;
+        return STATUS_SUCCESS;
+    }
+
+    return Irp->IoStatus.Status;
 }
 
 static
@@ -326,6 +339,8 @@ IsaPdoQueryResources(
     ULONG ListSize;
     PCM_RESOURCE_LIST ResourceList;
 
+    UNREFERENCED_PARAMETER(IrpSp);
+
     PAGED_CODE();
 
     if (!PdoExt->ResourceList)
@@ -352,6 +367,8 @@ IsaPdoQueryResourceRequirements(
     ULONG ListSize;
     PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList;
 
+    UNREFERENCED_PARAMETER(IrpSp);
+
     PAGED_CODE();
 
     if (!PdoExt->RequirementsList)
@@ -367,15 +384,18 @@ IsaPdoQueryResourceRequirements(
     return STATUS_SUCCESS;
 }
 
+#define IS_READ_PORT(_d) ((_d)->Type == CmResourceTypePort && (_d)->u.Port.Length > 1)
+
 static
 CODE_SEG("PAGE")
 NTSTATUS
 IsaPdoStartReadPort(
-    _In_ PISAPNP_FDO_EXTENSION FdoExt,
+    _In_ PISAPNP_PDO_EXTENSION PdoExt,
     _In_ PIO_STACK_LOCATION IrpSp)
 {
+    PISAPNP_FDO_EXTENSION FdoExt = PdoExt->FdoExt;
     PCM_RESOURCE_LIST ResourceList = IrpSp->Parameters.StartDevice.AllocatedResources;
-    NTSTATUS Status = STATUS_INSUFFICIENT_RESOURCES;
+    NTSTATUS Status;
     ULONG i;
 
     PAGED_CODE();
@@ -396,98 +416,101 @@ IsaPdoStartReadPort(
         return STATUS_REVISION_MISMATCH;
     }
 
-    for (i = 0; i < ResourceList->List[0].PartialResourceList.Count; i++)
+    /* Try various Read Ports from the list */
+    if (ResourceList->List[0].PartialResourceList.Count > 3)
     {
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR PartialDescriptor =
-            &ResourceList->List[0].PartialResourceList.PartialDescriptors[i];
-
-        if (PartialDescriptor->Type == CmResourceTypePort &&
-            PartialDescriptor->u.Port.Length > 1 && !FdoExt->ReadDataPort)
+        for (i = 0; i < ResourceList->List[0].PartialResourceList.Count; i++)
         {
-            PUCHAR ReadDataPort = ULongToPtr(PartialDescriptor->u.Port.Start.u.LowPart + 3);
-            if (NT_SUCCESS(IsaHwTryReadDataPort(ReadDataPort)))
+            PCM_PARTIAL_RESOURCE_DESCRIPTOR PartialDescriptor =
+                &ResourceList->List[0].PartialResourceList.PartialDescriptors[i];
+
+            if (IS_READ_PORT(PartialDescriptor))
             {
+                PUCHAR ReadDataPort = ULongToPtr(PartialDescriptor->u.Port.Start.u.LowPart + 3);
+
                 /* We detected some ISAPNP cards */
-
-                FdoExt->ReadDataPort = ReadDataPort;
-
-                IsaPnpAcquireDeviceDataLock(FdoExt);
-                Status = IsaHwFillDeviceList(FdoExt);
-                IsaPnpReleaseDeviceDataLock(FdoExt);
-
-                if (FdoExt->DeviceCount > 0)
+                if (NT_SUCCESS(IsaHwTryReadDataPort(ReadDataPort)))
                 {
-                    IoInvalidateDeviceRelations(FdoExt->Pdo, BusRelations);
-                    IoInvalidateDeviceRelations(FdoExt->ReadPortPdo, RemovalRelations);
+                    if (PdoExt->RequirementsList)
+                        ExFreePoolWithTag(PdoExt->RequirementsList, TAG_ISAPNP);
+
+                    Status = IsaPnpCreateReadPortDORequirements(PdoExt,
+                                                                PartialDescriptor->
+                                                                u.Port.Start.u.LowPart);
+                    if (!NT_SUCCESS(Status))
+                        return Status;
+
+                    PdoExt->Flags |= ISAPNP_READ_PORT_NEED_REBALANCE;
+
+                    IoInvalidateDeviceState(PdoExt->Common.Self);
+
+                    return STATUS_RESOURCE_REQUIREMENTS_CHANGED;
                 }
-            }
-            else
-            {
-                /* Mark read data port as started, even if no card has been detected */
-                Status = STATUS_SUCCESS;
             }
         }
     }
-
-    return Status;
-}
-
-static
-NTSTATUS
-NTAPI
-IsaPdoOnRepeaterComplete(
-    PDEVICE_OBJECT Tdo,
-    PIRP SubIrp,
-    PVOID NeedsVote)
-{
-    PIO_STACK_LOCATION SubStack = IoGetCurrentIrpStackLocation(SubIrp);
-    PIRP Irp = (PIRP)SubStack->Parameters.Others.Argument1;
-    ObDereferenceObject(Tdo);
-
-    if (SubIrp->IoStatus.Status == STATUS_NOT_SUPPORTED)
+    /* Set the Read Port */
+    else if (ResourceList->List[0].PartialResourceList.Count == 3)
     {
-        if (NeedsVote)
+        for (i = 0; i < ResourceList->List[0].PartialResourceList.Count; i++)
         {
-            Irp->IoStatus.Status = STATUS_UNSUCCESSFUL;
+            PCM_PARTIAL_RESOURCE_DESCRIPTOR PartialDescriptor =
+                &ResourceList->List[0].PartialResourceList.PartialDescriptors[i];
+
+            if (IS_READ_PORT(PartialDescriptor))
+            {
+                PUCHAR ReadDataPort = ULongToPtr(PartialDescriptor->u.Port.Start.u.LowPart + 3);
+
+                /* Run the isolation protocol */
+                if (NT_SUCCESS(IsaHwTryReadDataPort(ReadDataPort)))
+                {
+                    PdoExt->Flags &= ~ISAPNP_READ_PORT_NEED_REBALANCE;
+
+                    FdoExt->ReadDataPort = ReadDataPort;
+
+                    IsaPnpAcquireDeviceDataLock(FdoExt);
+
+                    /* Card identification */
+                    Status = IsaHwFillDeviceList(FdoExt);
+
+                    if (FdoExt->DeviceCount > 0)
+                    {
+                        IoInvalidateDeviceRelations(FdoExt->Pdo, BusRelations);
+                        IoInvalidateDeviceRelations(FdoExt->ReadPortPdo, RemovalRelations);
+                    }
+
+                    IsaPnpReleaseDeviceDataLock(FdoExt);
+
+                    return Status;
+                }
+            }
         }
     }
     else
     {
-        Irp->IoStatus = SubIrp->IoStatus;
+        return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
 
-    IoFreeIrp(SubIrp);
-    IoCompleteRequest(Irp, IO_NO_INCREMENT);
-    return STATUS_MORE_PROCESSING_REQUIRED;
+    /* Mark Read Port as started, even if no card has been detected */
+    return STATUS_SUCCESS;
 }
 
+static
+CODE_SEG("PAGE")
 NTSTATUS
-NTAPI
-IsaPdoRepeatRequest(
+IsaPdoFilterResourceRequirements(
     _In_ PISAPNP_PDO_EXTENSION PdoExt,
-    _In_ PIRP Irp,
-    _In_ BOOLEAN NeedsVote)
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp)
 {
-    PDEVICE_OBJECT Fdo = PdoExt->FdoExt->Common.Self;
-    PIO_STACK_LOCATION Stack = IoGetCurrentIrpStackLocation(Irp);
-    PDEVICE_OBJECT Tdo = IoGetAttachedDeviceReference(Fdo);
-    PIRP SubIrp = IoAllocateIrp(Tdo->StackSize + 1, FALSE);
-    PIO_STACK_LOCATION SubStack = IoGetNextIrpStackLocation(SubIrp);
+    UNREFERENCED_PARAMETER(Irp);
 
-    SubStack->DeviceObject = Tdo;
-    SubStack->Parameters.Others.Argument1 = (PVOID)Irp;
+    PAGED_CODE();
 
-    IoSetNextIrpStackLocation(SubIrp);
-    SubStack = IoGetNextIrpStackLocation(SubIrp);
-    RtlCopyMemory(SubStack, Stack, FIELD_OFFSET(IO_STACK_LOCATION, CompletionRoutine));
-    SubStack->Control = 0;
-    IoSetCompletionRoutine(SubIrp, IsaPdoOnRepeaterComplete, (PVOID)(ULONG_PTR)NeedsVote, TRUE, TRUE, TRUE);
-
-    SubIrp->IoStatus.Status = STATUS_NOT_SUPPORTED;
-    IoMarkIrpPending(Irp);
-    IoCallDriver(Tdo, SubIrp);
-
-    return STATUS_PENDING;
+    /* TODO: Handle */
+    UNREFERENCED_PARAMETER(PdoExt);
+    UNREFERENCED_PARAMETER(IrpSp);
+    return Irp->IoStatus.Status;
 }
 
 static
@@ -515,6 +538,90 @@ IsaPdoQueryBusInformation(
     return STATUS_SUCCESS;
 }
 
+static
+CODE_SEG("PAGE")
+NTSTATUS
+IsaPdoQueryDeviceUsageNotification(
+    _In_ PISAPNP_PDO_EXTENSION PdoExt,
+    _Inout_ PIRP Irp,
+    _In_ PIO_STACK_LOCATION IrpSp)
+{
+    BOOLEAN InPath = IrpSp->Parameters.UsageNotification.InPath;
+
+    PAGED_CODE();
+
+    switch (IrpSp->Parameters.UsageNotification.Type)
+    {
+        case DeviceUsageTypePaging:
+        case DeviceUsageTypeHibernation:
+        case DeviceUsageTypeDumpFile:
+            IoAdjustPagingPathCount(&PdoExt->SpecialFiles, InPath);
+            IoInvalidateDeviceState(PdoExt->Common.Self);
+            break;
+
+        default:
+            return Irp->IoStatus.Status;
+    }
+
+    return STATUS_SUCCESS;
+}
+
+static
+CODE_SEG("PAGE")
+NTSTATUS
+IsaPdoRemoveDevice(
+    _In_ PISAPNP_PDO_EXTENSION PdoExt,
+    _Inout_ PIRP Irp)
+{
+    PISAPNP_FDO_EXTENSION FdoExt = PdoExt->FdoExt;
+
+    UNREFERENCED_PARAMETER(Irp);
+
+    PAGED_CODE();
+
+    if (!(PdoExt->Flags & ISAPNP_ENUMERATED))
+    {
+        if (PdoExt->IsaPnpDevice && FdoExt)
+        {
+            IsaPnpAcquireDeviceDataLock(FdoExt);
+
+            RemoveEntryList(&PdoExt->IsaPnpDevice->DeviceLink);
+            --FdoExt->DeviceCount;
+
+            IsaPnpReleaseDeviceDataLock(FdoExt);
+        }
+
+        if (PdoExt->IsaPnpDevice)
+            IsaPnpRemoveLogicalDevice(PdoExt->Common.Self);
+        else
+            IsaPnpRemoveReadPortDO(PdoExt->Common.Self);
+    }
+
+    return STATUS_SUCCESS;
+}
+
+CODE_SEG("PAGE")
+VOID
+IsaPnpRemoveLogicalDevice(
+    _In_ PDEVICE_OBJECT Pdo)
+{
+    PISAPNP_PDO_EXTENSION PdoExt = Pdo->DeviceExtension;
+    PISAPNP_LOGICAL_DEVICE LogDev = PdoExt->IsaPnpDevice;
+
+    PAGED_CODE();
+    ASSERT(LogDev);
+
+    DPRINT("Removing CSN %lu, LDN %lu\n", LogDev->CSN, LogDev->LDN);
+
+    if (PdoExt->RequirementsList)
+        ExFreePoolWithTag(PdoExt->RequirementsList, TAG_ISAPNP);
+
+    if (PdoExt->ResourceList)
+        ExFreePoolWithTag(PdoExt->ResourceList, TAG_ISAPNP);
+
+    IoDeleteDevice(PdoExt->Common.Self);
+}
+
 CODE_SEG("PAGE")
 NTSTATUS
 IsaPdoPnp(
@@ -526,13 +633,32 @@ IsaPdoPnp(
 
     PAGED_CODE();
 
+    if (PdoExt->IsaPnpDevice)
+    {
+        DPRINT("%s(%p, %p) CSN %lu, LDN %lu, Minor - %X\n",
+               __FUNCTION__,
+               PdoExt,
+               Irp,
+               PdoExt->IsaPnpDevice->CSN,
+               PdoExt->IsaPnpDevice->LDN,
+               IrpSp->MinorFunction);
+    }
+    else
+    {
+        DPRINT("%s(%p, %p) ReadPort, Minor - %X\n",
+               __FUNCTION__,
+               PdoExt,
+               Irp,
+               IrpSp->MinorFunction);
+    }
+
     switch (IrpSp->MinorFunction)
     {
         case IRP_MN_START_DEVICE:
             if (PdoExt->IsaPnpDevice)
                 Status = IsaHwActivateDevice(PdoExt->IsaPnpDevice);
             else
-                Status = IsaPdoStartReadPort(PdoExt->FdoExt, IrpSp);
+                Status = IsaPdoStartReadPort(PdoExt, IrpSp);
 
             if (NT_SUCCESS(Status))
                 PdoExt->Common.State = dsStarted;
@@ -548,6 +674,16 @@ IsaPdoPnp(
                 PdoExt->Common.State = dsStopped;
             break;
 
+        case IRP_MN_QUERY_STOP_DEVICE:
+        case IRP_MN_QUERY_REMOVE_DEVICE:
+        {
+            if (PdoExt->SpecialFiles > 0)
+                Status = STATUS_DEVICE_BUSY;
+            else
+                Status = STATUS_SUCCESS;
+            break;
+        }
+
         case IRP_MN_QUERY_DEVICE_RELATIONS:
             Status = IsaPdoQueryDeviceRelations(PdoExt, Irp, IrpSp);
             break;
@@ -556,9 +692,12 @@ IsaPdoPnp(
             Status = IsaPdoQueryCapabilities(PdoExt, Irp, IrpSp);
             break;
 
+        case IRP_MN_REMOVE_DEVICE:
+            Status = IsaPdoRemoveDevice(PdoExt, Irp);
+            break;
+
         case IRP_MN_QUERY_PNP_DEVICE_STATE:
-            if (PdoExt->Common.Self == PdoExt->FdoExt->ReadPortPdo)
-                Status = IsaPdoQueryPnpDeviceState(PdoExt, Irp, IrpSp);
+            Status = IsaPdoQueryPnpDeviceState(PdoExt, Irp);
             break;
 
         case IRP_MN_QUERY_RESOURCES:
@@ -576,30 +715,26 @@ IsaPdoPnp(
                 Status = IsaReadPortQueryId(PdoExt, Irp, IrpSp);
             break;
 
+        case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
+            Status = IsaPdoFilterResourceRequirements(PdoExt, Irp, IrpSp);
+            break;
+
         case IRP_MN_QUERY_BUS_INFORMATION:
             Status = IsaPdoQueryBusInformation(PdoExt, Irp);
             break;
 
-        case IRP_MN_QUERY_REMOVE_DEVICE:
-        case IRP_MN_REMOVE_DEVICE:
+        case IRP_MN_DEVICE_USAGE_NOTIFICATION:
+            Status = IsaPdoQueryDeviceUsageNotification(PdoExt, Irp, IrpSp);
+            break;
+
         case IRP_MN_CANCEL_REMOVE_DEVICE:
-        case IRP_MN_QUERY_STOP_DEVICE:
         case IRP_MN_CANCEL_STOP_DEVICE:
-        case IRP_MN_QUERY_DEVICE_TEXT:
-        case IRP_MN_FILTER_RESOURCE_REQUIREMENTS:
         case IRP_MN_SURPRISE_REMOVAL:
             Status = STATUS_SUCCESS;
             break;
 
-        case IRP_MN_READ_CONFIG:
-        case IRP_MN_WRITE_CONFIG:
-        case IRP_MN_EJECT:
-        case IRP_MN_SET_LOCK:
-        case IRP_MN_DEVICE_USAGE_NOTIFICATION:
-            return IsaPdoRepeatRequest(PdoExt, Irp, TRUE);
-
         default:
-            DPRINT1("Unknown PnP code: %x\n", IrpSp->MinorFunction);
+            DPRINT("Unknown PnP code: %X\n", IrpSp->MinorFunction);
             break;
     }
 
