@@ -783,14 +783,28 @@ IsaPdoPnp(
     switch (IrpSp->MinorFunction)
     {
         case IRP_MN_START_DEVICE:
+        {
             if (PdoExt->IsaPnpDevice)
+            {
+                Status = IsaHwConfigureDevice(PdoExt->FdoExt,
+                                              PdoExt->IsaPnpDevice,
+                                              IrpSp->Parameters.StartDevice.AllocatedResources);
+                if (!NT_SUCCESS(Status))
+                    break;
+
                 Status = IsaHwActivateDevice(PdoExt->FdoExt, PdoExt->IsaPnpDevice);
+                if (!NT_SUCCESS(Status))
+                    break;
+            }
             else
+            {
                 Status = IsaPdoStartReadPort(PdoExt, IrpSp);
+            }
 
             if (NT_SUCCESS(Status))
                 PdoExt->Common.State = dsStarted;
             break;
+        }
 
         case IRP_MN_STOP_DEVICE:
             if (PdoExt->IsaPnpDevice)

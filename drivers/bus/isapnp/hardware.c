@@ -1497,6 +1497,26 @@ IsaHwTryReadDataPort(
     return TryIsolate(ReadDataPort);
 }
 
+CODE_SEG("PAGE")
+NTSTATUS
+IsaHwConfigureDevice(
+    _In_ PISAPNP_FDO_EXTENSION FdoExt,
+    _In_ PISAPNP_LOGICAL_DEVICE LogicalDevice,
+    _In_ PCM_RESOURCE_LIST Resources)
+{
+    PAGED_CODE();
+
+    if (!Resources)
+    {
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
+    /* FIXME */
+    UNREFERENCED_PARAMETER(FdoExt);
+    UNREFERENCED_PARAMETER(LogicalDevice);
+    return STATUS_SUCCESS;
+}
+
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 IsaHwActivateDevice(

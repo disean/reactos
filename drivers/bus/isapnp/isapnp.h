@@ -248,6 +248,12 @@ NTSTATUS
 IsaHwFillDeviceList(
     _In_ PISAPNP_FDO_EXTENSION FdoExt);
 
+NTSTATUS
+IsaHwConfigureDevice(
+    _In_ PISAPNP_FDO_EXTENSION FdoExt,
+    _In_ PISAPNP_LOGICAL_DEVICE LogicalDevice,
+    _In_ PCM_RESOURCE_LIST Resources);
+
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 IsaHwDeactivateDevice(
