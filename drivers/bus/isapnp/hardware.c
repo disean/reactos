@@ -171,9 +171,14 @@ static
 inline
 VOID
 ActivateDevice(
+    _In_ PUCHAR ReadDataPort,
     _In_ USHORT LogDev)
 {
     WriteLogicalDeviceNumber(LogDev);
+
+    WriteByte(ISAPNP_IORANGECHECK,
+              ReadByte(ReadDataPort, ISAPNP_IORANGECHECK) & ~2);
+
     WriteByte(ISAPNP_ACTIVATE, 1);
 }
 
@@ -1331,6 +1336,7 @@ TryIsolate(
 static
 VOID
 DeviceActivation(
+    _In_ PUCHAR ReadDataPort,
     _In_ PISAPNP_LOGICAL_DEVICE IsaDevice,
     _In_ BOOLEAN Activate)
 {
@@ -1339,7 +1345,7 @@ DeviceActivation(
     Wake(IsaDevice->CSN);
 
     if (Activate)
-        ActivateDevice(IsaDevice->LDN);
+        ActivateDevice(ReadDataPort, IsaDevice->LDN);
     else
         DeactivateDevice(IsaDevice->LDN);
 
@@ -1494,10 +1500,10 @@ IsaHwTryReadDataPort(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 IsaHwActivateDevice(
+    _In_ PISAPNP_FDO_EXTENSION FdoExt,
     _In_ PISAPNP_LOGICAL_DEVICE LogicalDevice)
 {
-    DeviceActivation(LogicalDevice,
-                     TRUE);
+    DeviceActivation(FdoExt->ReadDataPort, LogicalDevice, TRUE);
 
     return STATUS_SUCCESS;
 }
@@ -1505,10 +1511,10 @@ IsaHwActivateDevice(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 IsaHwDeactivateDevice(
+    _In_ PISAPNP_FDO_EXTENSION FdoExt,
     _In_ PISAPNP_LOGICAL_DEVICE LogicalDevice)
 {
-    DeviceActivation(LogicalDevice,
-                     FALSE);
+    DeviceActivation(FdoExt->ReadDataPort, LogicalDevice, FALSE);
 
     return STATUS_SUCCESS;
 }

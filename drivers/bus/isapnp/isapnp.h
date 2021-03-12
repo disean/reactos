@@ -251,11 +251,13 @@ IsaHwFillDeviceList(
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 IsaHwDeactivateDevice(
+    _In_ PISAPNP_FDO_EXTENSION FdoExt,
     _In_ PISAPNP_LOGICAL_DEVICE LogicalDevice);
 
 _IRQL_requires_max_(DISPATCH_LEVEL)
 NTSTATUS
 IsaHwActivateDevice(
+    _In_ PISAPNP_FDO_EXTENSION FdoExt,
     _In_ PISAPNP_LOGICAL_DEVICE LogicalDevice);
 
 #ifdef __cplusplus

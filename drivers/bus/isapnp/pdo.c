@@ -784,7 +784,7 @@ IsaPdoPnp(
     {
         case IRP_MN_START_DEVICE:
             if (PdoExt->IsaPnpDevice)
-                Status = IsaHwActivateDevice(PdoExt->IsaPnpDevice);
+                Status = IsaHwActivateDevice(PdoExt->FdoExt, PdoExt->IsaPnpDevice);
             else
                 Status = IsaPdoStartReadPort(PdoExt, IrpSp);
 
@@ -794,7 +794,7 @@ IsaPdoPnp(
 
         case IRP_MN_STOP_DEVICE:
             if (PdoExt->IsaPnpDevice)
-                Status = IsaHwDeactivateDevice(PdoExt->IsaPnpDevice);
+                Status = IsaHwDeactivateDevice(PdoExt->FdoExt, PdoExt->IsaPnpDevice);
             else
                 Status = STATUS_SUCCESS;
 
