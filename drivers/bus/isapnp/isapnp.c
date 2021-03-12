@@ -10,6 +10,8 @@
 
 #include <isapnp.h>
 
+#include <search.h>
+
 #define NDEBUG
 #include <debug.h>
 
@@ -23,7 +25,152 @@ KEVENT BusSyncEvent;
 _Guarded_by_(BusSyncEvent)
 LIST_ENTRY BusListHead;
 
+static PUCHAR Priority;
+
 /* FUNCTIONS ******************************************************************/
+
+static
+CODE_SEG("PAGE")
+int
+IsaComparePriority(
+    const void *A,
+    const void *B)
+{
+    return Priority[*(PUCHAR)A] - Priority[*(PUCHAR)B];
+}
+
+static
+CODE_SEG("PAGE")
+VOID
+IsaDetermineBestConfig(
+    _Out_ PUCHAR BestConfig,
+    _In_ PISAPNP_ALTERNATIVES Alternatives)
+{
+    ULONG i;
+
+    PAGED_CODE();
+
+    for (i = 0; i < ISAPNP_MAX_ALTERNATIVES; i++)
+        BestConfig[i] = i;
+
+    Priority = Alternatives->Priority;
+    qsort(BestConfig,
+          Alternatives->Count,
+          sizeof(UCHAR),
+          IsaComparePriority);
+}
+
+static
+CODE_SEG("PAGE")
+VOID
+IsaConvertIoDescription(
+    _Out_ PIO_RESOURCE_DESCRIPTOR Descriptor,
+    _In_ PISAPNP_IO_DESCRIPTION Description)
+{
+    PAGED_CODE();
+
+    Descriptor->Type = CmResourceTypePort;
+    Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+    Descriptor->Flags = CM_RESOURCE_PORT_IO;
+    if (Description->Information & 0x1)
+        Descriptor->Flags |= CM_RESOURCE_PORT_16_BIT_DECODE;
+    else
+        Descriptor->Flags |= CM_RESOURCE_PORT_10_BIT_DECODE;
+    Descriptor->u.Port.Length = Description->Length;
+    Descriptor->u.Port.Alignment = Description->Alignment;
+    Descriptor->u.Port.MinimumAddress.LowPart = Description->Minimum;
+    Descriptor->u.Port.MaximumAddress.LowPart = Description->Maximum +
+                                                             Description->Length - 1;
+}
+
+static
+CODE_SEG("PAGE")
+VOID
+IsaConvertIrqDescription(
+    _Out_ PIO_RESOURCE_DESCRIPTOR Descriptor,
+    _In_ PISAPNP_IRQ_DESCRIPTION Description,
+    _In_ ULONG Vector,
+    _In_ BOOLEAN FirstDescriptor)
+{
+    PAGED_CODE();
+
+    if (!FirstDescriptor)
+        Descriptor->Option = IO_RESOURCE_ALTERNATIVE;
+    Descriptor->Type = CmResourceTypeInterrupt;
+    if (Description->Information & 0xC)
+    {
+        Descriptor->Flags = CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE;
+        Descriptor->ShareDisposition = CmResourceShareShared;
+    }
+    else
+    {
+        Descriptor->Flags = CM_RESOURCE_INTERRUPT_LATCHED;
+        Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+    }
+    Descriptor->u.Interrupt.MinimumVector =
+    Descriptor->u.Interrupt.MaximumVector = Vector;
+}
+
+static
+CODE_SEG("PAGE")
+VOID
+IsaConvertDmaDescription(
+    _Out_ PIO_RESOURCE_DESCRIPTOR Descriptor,
+    _In_ PISAPNP_DMA_DESCRIPTION Description,
+    _In_ ULONG Channel,
+    _In_ BOOLEAN FirstDescriptor)
+{
+    PAGED_CODE();
+
+    if (!FirstDescriptor)
+        Descriptor->Option = IO_RESOURCE_ALTERNATIVE;
+    Descriptor->Type = CmResourceTypeDma;
+    Descriptor->ShareDisposition = CmResourceShareUndetermined;
+    Descriptor->Flags = CM_RESOURCE_DMA_8; /* Information byte is ignored */
+    Descriptor->u.Dma.MinimumChannel =
+    Descriptor->u.Dma.MaximumChannel = Channel;
+}
+
+static
+CODE_SEG("PAGE")
+VOID
+IsaConvertMemRangeDescription(
+    _Out_ PIO_RESOURCE_DESCRIPTOR Descriptor,
+    _In_ PISAPNP_MEMRANGE_DESCRIPTION Description)
+{
+    PAGED_CODE();
+
+    Descriptor->Type = CmResourceTypeMemory;
+    Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+    Descriptor->Flags = CM_RESOURCE_MEMORY_24; /* Information byte is ignored */
+    Descriptor->u.Memory.Length = Description->Length << 8;
+    if (Description->Alignment == 0)
+        Descriptor->u.Memory.Alignment = 0x10000;
+    else
+        Descriptor->u.Memory.Alignment = Description->Alignment;
+    Descriptor->u.Memory.MinimumAddress.LowPart = Description->Minimum << 8;
+    Descriptor->u.Memory.MaximumAddress.LowPart = (Description->Maximum << 8) +
+                                                  (Description->Length << 8) - 1;
+}
+
+static
+CODE_SEG("PAGE")
+VOID
+IsaConvertMemRange32Description(
+    _Out_ PIO_RESOURCE_DESCRIPTOR Descriptor,
+    _In_ PISAPNP_MEMRANGE32_DESCRIPTION Description)
+{
+    PAGED_CODE();
+
+    Descriptor->Type = CmResourceTypeMemory;
+    Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+    Descriptor->Flags = CM_RESOURCE_MEMORY_24; /* Information byte is ignored */
+    Descriptor->u.Memory.Length = Description->Length;
+    Descriptor->u.Memory.Alignment = Description->Alignment;
+    Descriptor->u.Memory.MinimumAddress.LowPart = Description->Minimum;
+    Descriptor->u.Memory.MaximumAddress.LowPart = Description->Maximum +
+                                                  Description->Length - 1;
+}
 
 static
 CODE_SEG("PAGE")
@@ -36,11 +183,12 @@ IsaFdoCreateRequirements(
     RTL_BITMAP DmaBitmap[RTL_NUMBER_OF(LogDev->Dma)];
     ULONG IrqData[RTL_NUMBER_OF(LogDev->Irq)];
     ULONG DmaData[RTL_NUMBER_OF(LogDev->Dma)];
-    ULONG ResourceCount = 0;
+    ULONG ResourceCount = 0, AltCount = 0, AltOptionalCount = 0;
     ULONG ListSize, i, j;
-    BOOLEAN FirstIrq = TRUE, FirstDma = TRUE;
+    BOOLEAN FirstDescriptor;
     PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList;
     PIO_RESOURCE_DESCRIPTOR Descriptor;
+    PISAPNP_ALTERNATIVES Alternatives = LogDev->Alternatives;
 
     PAGED_CODE();
 
@@ -58,37 +206,105 @@ IsaFdoCreateRequirements(
             break;
 
         IrqData[i] = LogDev->Irq[i].Description.Mask;
-        RtlInitializeBitMap(&IrqBitmap[i], &IrqData[i], 16);
+        RtlInitializeBitMap(&IrqBitmap[i],
+                            &IrqData[i],
+                            RTL_BITS_OF(LogDev->Irq[i].Description.Mask));
         ResourceCount += RtlNumberOfSetBits(&IrqBitmap[i]);
-
-        if (LogDev->Irq[i].Description.Information & 0x4)
-        {
-            /* Add room for level sensitive */
-            ResourceCount += RtlNumberOfSetBits(&IrqBitmap[i]);
-        }
     }
-    if (ResourceCount == 0)
-        return STATUS_SUCCESS;
     for (i = 0; i < RTL_NUMBER_OF(LogDev->Irq); i++)
     {
         if (!LogDev->Dma[i].Description.Mask)
             break;
 
         DmaData[i] = LogDev->Dma[i].Description.Mask;
-        RtlInitializeBitMap(&DmaBitmap[i], &DmaData[i], 8);
+        RtlInitializeBitMap(&DmaBitmap[i],
+                            &DmaData[i],
+                            RTL_BITS_OF(LogDev->Dma[i].Description.Mask));
         ResourceCount += RtlNumberOfSetBits(&DmaBitmap[i]);
     }
+    for (i = 0; i < RTL_NUMBER_OF(LogDev->MemRange); i++)
+    {
+        if (!LogDev->MemRange[i].Description.Length)
+            break;
+
+        ResourceCount++;
+    }
+    for (i = 0; i < RTL_NUMBER_OF(LogDev->MemRange32); i++)
+    {
+        if (!LogDev->MemRange32[i].Description.Length)
+            break;
+
+        ResourceCount++;
+    }
+    if (Alternatives)
+    {
+        RTL_BITMAP TempBitmap;
+        ULONG TempBuffer;
+        UCHAR BitCount;
+
+        if (Alternatives->Io[0].Length)
+            AltCount++;
+        if (Alternatives->Irq[0].Mask)
+            AltCount++;
+        if (Alternatives->Dma[0].Mask)
+            AltCount++;
+        if (Alternatives->MemRange[0].Length)
+            AltCount++;
+        if (Alternatives->MemRange32[0].Length)
+            AltCount++;
+        ResourceCount += AltCount;
+
+        if (Alternatives->Irq[0].Mask)
+        {
+            for (i = 0; i < Alternatives->Count; i++)
+            {
+                TempBuffer = Alternatives->Irq[i].Mask;
+                RtlInitializeBitMap(&TempBitmap,
+                                    &TempBuffer,
+                                    RTL_BITS_OF(Alternatives->Irq[i].Mask));
+                BitCount = RtlNumberOfSetBits(&TempBitmap);
+
+                if (BitCount > 1)
+                    AltOptionalCount += BitCount - 1;
+            }
+        }
+        if (Alternatives->Dma[0].Mask)
+        {
+            for (i = 0; i < Alternatives->Count; i++)
+            {
+                TempBuffer = Alternatives->Dma[i].Mask;
+                RtlInitializeBitMap(&TempBitmap,
+                                    &TempBuffer,
+                                    RTL_BITS_OF(Alternatives->Dma[i].Mask));
+                BitCount = RtlNumberOfSetBits(&TempBitmap);
+
+                if (BitCount > 1)
+                    AltOptionalCount += BitCount - 1;
+            }
+        }
+    }
+    if (ResourceCount == 0)
+        return STATUS_SUCCESS;
 
     /* Allocate memory to store requirements */
-    ListSize = sizeof(IO_RESOURCE_REQUIREMENTS_LIST)
-               + ResourceCount * sizeof(IO_RESOURCE_DESCRIPTOR);
+    ListSize = sizeof(IO_RESOURCE_REQUIREMENTS_LIST);
+    if (Alternatives)
+    {
+        ListSize += sizeof(IO_RESOURCE_DESCRIPTOR) * (ResourceCount - 1) * Alternatives->Count
+                    + sizeof(IO_RESOURCE_LIST) * (Alternatives->Count - 1) +
+                    + sizeof(IO_RESOURCE_DESCRIPTOR) * AltOptionalCount;
+    }
+    else
+    {
+        ListSize += sizeof(IO_RESOURCE_DESCRIPTOR) * (ResourceCount - 1);
+    }
     RequirementsList = ExAllocatePoolZero(PagedPool, ListSize, TAG_ISAPNP);
     if (!RequirementsList)
         return STATUS_NO_MEMORY;
 
     RequirementsList->ListSize = ListSize;
     RequirementsList->InterfaceType = Isa;
-    RequirementsList->AlternativeLists = 1;
+    RequirementsList->AlternativeLists = Alternatives ? Alternatives->Count : 1;
 
     RequirementsList->List[0].Version = 1;
     RequirementsList->List[0].Revision = 1;
@@ -101,56 +317,27 @@ IsaFdoCreateRequirements(
         if (!LogDev->Io[i].Description.Length)
             break;
 
-        DPRINT("Device.Io[%d].Information = 0x%02x\n", i, LogDev->Io[i].Description.Information);
-        DPRINT("Device.Io[%d].Minimum = 0x%02x\n", i, LogDev->Io[i].Description.Minimum);
-        DPRINT("Device.Io[%d].Maximum = 0x%02x\n", i, LogDev->Io[i].Description.Maximum);
-        DPRINT("Device.Io[%d].Alignment = 0x%02x\n", i, LogDev->Io[i].Description.Alignment);
-        DPRINT("Device.Io[%d].Length = 0x%02x\n", i, LogDev->Io[i].Description.Length);
-
-        Descriptor->Type = CmResourceTypePort;
-        Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
-        if (LogDev->Io[i].Description.Information & 0x1)
-            Descriptor->Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
-        else
-            Descriptor->Flags = CM_RESOURCE_PORT_10_BIT_DECODE;
-        Descriptor->u.Port.Length = LogDev->Io[i].Description.Length;
-        Descriptor->u.Port.Alignment = LogDev->Io[i].Description.Alignment;
-        Descriptor->u.Port.MinimumAddress.LowPart = LogDev->Io[i].Description.Minimum;
-        Descriptor->u.Port.MaximumAddress.LowPart =
-            LogDev->Io[i].Description.Maximum + LogDev->Io[i].Description.Length - 1;
-        Descriptor++;
+        IsaConvertIoDescription(Descriptor++, &LogDev->Io[i].Description);
     }
     for (i = 0; i < RTL_NUMBER_OF(LogDev->Irq); i++)
     {
         if (!LogDev->Irq[i].Description.Mask)
             break;
 
-        DPRINT("Device.Irq[%d].Mask = 0x%02x\n", i, LogDev->Irq[i].Description.Mask);
-        DPRINT("Device.Irq[%d].Information = 0x%02x\n", i, LogDev->Irq[i].Description.Information);
+        FirstDescriptor = TRUE;
 
-        for (j = 0; j < 15; j++)
+        for (j = 0; j < RTL_BITS_OF(LogDev->Irq[i].Description.Mask); j++)
         {
             if (!RtlCheckBit(&IrqBitmap[i], j))
                 continue;
 
-            if (FirstIrq)
-                FirstIrq = FALSE;
-            else
-                Descriptor->Option = IO_RESOURCE_ALTERNATIVE;
-            Descriptor->Type = CmResourceTypeInterrupt;
-            Descriptor->Flags = CM_RESOURCE_INTERRUPT_LATCHED;
-            Descriptor->u.Interrupt.MinimumVector = Descriptor->u.Interrupt.MaximumVector = j;
-            Descriptor++;
+            IsaConvertIrqDescription(Descriptor++,
+                                     &LogDev->Irq[i].Description,
+                                     j,
+                                     FirstDescriptor);
 
-            if (LogDev->Irq[i].Description.Information & 0x4)
-            {
-                /* Level interrupt */
-                Descriptor->Option = IO_RESOURCE_ALTERNATIVE;
-                Descriptor->Type = CmResourceTypeInterrupt;
-                Descriptor->Flags = CM_RESOURCE_INTERRUPT_LEVEL_SENSITIVE;
-                Descriptor->u.Interrupt.MinimumVector = Descriptor->u.Interrupt.MaximumVector = j;
-                Descriptor++;
-            }
+            if (FirstDescriptor)
+                FirstDescriptor = FALSE;
         }
     }
     for (i = 0; i < RTL_NUMBER_OF(LogDev->Dma); i++)
@@ -158,37 +345,133 @@ IsaFdoCreateRequirements(
         if (!LogDev->Dma[i].Description.Mask)
             break;
 
-        DPRINT("Device.Dma[%d].Mask = 0x%02x\n", i, LogDev->Dma[i].Description.Mask);
-        DPRINT("Device.Dma[%d].Information = 0x%02x\n", i, LogDev->Dma[i].Description.Information);
+        FirstDescriptor = TRUE;
 
-        for (j = 0; j < 8; j++)
+        for (j = 0; j < RTL_BITS_OF(LogDev->Dma[i].Description.Mask); j++)
         {
             if (!RtlCheckBit(&DmaBitmap[i], j))
                 continue;
 
-            if (FirstDma)
-                FirstDma = FALSE;
-            else
-                Descriptor->Option = IO_RESOURCE_ALTERNATIVE;
-            Descriptor->Type = CmResourceTypeDma;
-            switch (LogDev->Dma[i].Description.Information & 0x3)
+            IsaConvertDmaDescription(Descriptor++,
+                                     &LogDev->Dma[i].Description,
+                                     j,
+                                     FirstDescriptor);
+
+            if (FirstDescriptor)
+                FirstDescriptor = FALSE;
+        }
+    }
+    for (i = 0; i < RTL_NUMBER_OF(LogDev->MemRange); i++)
+    {
+        if (!LogDev->MemRange[i].Description.Length)
+            break;
+
+        IsaConvertMemRangeDescription(Descriptor++,
+                                      &LogDev->MemRange[i].Description);
+    }
+    for (i = 0; i < RTL_NUMBER_OF(LogDev->MemRange32); i++)
+    {
+        if (!LogDev->MemRange32[i].Description.Length)
+            break;
+
+        IsaConvertMemRange32Description(Descriptor++,
+                                        &LogDev->MemRange32[i].Description);
+    }
+    if (Alternatives)
+    {
+        UCHAR BestConfig[ISAPNP_MAX_ALTERNATIVES];
+        PIO_RESOURCE_LIST AltList = &RequirementsList->List[0];
+        PIO_RESOURCE_LIST NextList = AltList;
+        RTL_BITMAP TempBitmap;
+        ULONG TempBuffer;
+
+        IsaDetermineBestConfig(BestConfig, Alternatives);
+
+        for (i = 0; i < RequirementsList->AlternativeLists; i++)
+        {
+            RtlMoveMemory(NextList, AltList, sizeof(IO_RESOURCE_LIST));
+
+            /* Just because the 'NextList->Count++' correction */
+            NextList->Count = ResourceCount;
+
+            /* Propagate the fixed resources to our new list */
+            for (j = 0; j < AltList->Count - AltCount; j++)
             {
-                case 0x0: Descriptor->Flags |= CM_RESOURCE_DMA_8; break;
-                case 0x1: Descriptor->Flags |= CM_RESOURCE_DMA_8_AND_16; break;
-                case 0x2: Descriptor->Flags |= CM_RESOURCE_DMA_16; break;
-                default: break;
+                RtlMoveMemory(&NextList->Descriptors[j],
+                              &AltList->Descriptors[j],
+                              sizeof(IO_RESOURCE_DESCRIPTOR));
             }
-            if (LogDev->Dma[i].Description.Information & 0x4)
-                Descriptor->Flags |= CM_RESOURCE_DMA_BUS_MASTER;
-            switch ((LogDev->Dma[i].Description.Information >> 5) & 0x3)
+
+            Descriptor = &NextList->Descriptors[NextList->Count - AltCount];
+
+            /* Append alternatives */
+            if (Alternatives->Io[0].Length)
             {
-                case 0x1: Descriptor->Flags |= CM_RESOURCE_DMA_TYPE_A; break;
-                case 0x2: Descriptor->Flags |= CM_RESOURCE_DMA_TYPE_B; break;
-                case 0x3: Descriptor->Flags |= CM_RESOURCE_DMA_TYPE_F; break;
-                default: break;
+                IsaConvertIoDescription(Descriptor++,
+                                        &Alternatives->Io[BestConfig[i]]);
             }
-            Descriptor->u.Dma.MinimumChannel = Descriptor->u.Dma.MaximumChannel = j;
-            Descriptor++;
+            if (Alternatives->Irq[0].Mask)
+            {
+                TempBuffer = Alternatives->Irq[BestConfig[i]].Mask;
+                RtlInitializeBitMap(&TempBitmap,
+                                    &TempBuffer,
+                                    RTL_BITS_OF(Alternatives->Irq[BestConfig[i]].Mask));
+
+                FirstDescriptor = TRUE;
+
+                for (j = 0; j < RTL_BITS_OF(Alternatives->Irq[BestConfig[i]].Mask); j++)
+                {
+                    if (!RtlCheckBit(&TempBitmap, j))
+                        continue;
+
+                    IsaConvertIrqDescription(Descriptor++,
+                                             &Alternatives->Irq[BestConfig[i]],
+                                             j,
+                                             FirstDescriptor);
+
+                    if (FirstDescriptor)
+                        FirstDescriptor = FALSE;
+                    else
+                        NextList->Count++;
+                }
+            }
+            if (Alternatives->Dma[0].Mask)
+            {
+                TempBuffer = Alternatives->Dma[BestConfig[i]].Mask;
+                RtlInitializeBitMap(&TempBitmap,
+                                    &TempBuffer,
+                                    RTL_BITS_OF(Alternatives->Dma[BestConfig[i]].Mask));
+
+                FirstDescriptor = TRUE;
+
+                for (j = 0; j < RTL_BITS_OF(Alternatives->Dma[BestConfig[i]].Mask); j++)
+                {
+                    if (!RtlCheckBit(&TempBitmap, j))
+                        continue;
+
+                    IsaConvertDmaDescription(Descriptor++,
+                                             &Alternatives->Dma[BestConfig[i]],
+                                             j,
+                                             FirstDescriptor);
+
+                    if (FirstDescriptor)
+                        FirstDescriptor = FALSE;
+                    else
+                        NextList->Count++;
+                }
+            }
+            if (Alternatives->MemRange[0].Length)
+            {
+                IsaConvertMemRangeDescription(Descriptor++,
+                                              &Alternatives->MemRange[BestConfig[i]]);
+            }
+            if (Alternatives->MemRange32[0].Length)
+            {
+                IsaConvertMemRange32Description(Descriptor++,
+                                                &Alternatives->MemRange32[BestConfig[i]]);
+            }
+
+            NextList = (PIO_RESOURCE_LIST)(NextList->Descriptors + NextList->Count);
         }
     }
 
@@ -210,6 +493,9 @@ IsaFdoCreateResources(
 
     PAGED_CODE();
 
+    if (!(LogDev->Flags & ISAPNP_HAS_RESOURCES))
+        return STATUS_SUCCESS;
+
     /* Count number of required resources */
     for (i = 0; i < RTL_NUMBER_OF(LogDev->Io); i++)
     {
@@ -228,6 +514,20 @@ IsaFdoCreateResources(
     for (i = 0; i < RTL_NUMBER_OF(LogDev->Dma); i++)
     {
         if (LogDev->Dma[i].CurrentChannel != 4)
+            ResourceCount++;
+        else
+            break;
+    }
+    for (i = 0; i < RTL_NUMBER_OF(LogDev->MemRange); i++)
+    {
+        if (LogDev->MemRange[i].CurrentBase)
+            ResourceCount++;
+        else
+            break;
+    }
+    for (i = 0; i < RTL_NUMBER_OF(LogDev->MemRange32); i++)
+    {
+        if (LogDev->MemRange32[i].CurrentBase)
             ResourceCount++;
         else
             break;
@@ -258,10 +558,11 @@ IsaFdoCreateResources(
         Descriptor = &ResourceList->List[0].PartialResourceList.PartialDescriptors[ResourceCount++];
         Descriptor->Type = CmResourceTypePort;
         Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+        Descriptor->Flags = CM_RESOURCE_PORT_IO;
         if (LogDev->Io[i].Description.Information & 0x1)
-            Descriptor->Flags = CM_RESOURCE_PORT_16_BIT_DECODE;
+            Descriptor->Flags |= CM_RESOURCE_PORT_16_BIT_DECODE;
         else
-            Descriptor->Flags = CM_RESOURCE_PORT_10_BIT_DECODE;
+            Descriptor->Flags |= CM_RESOURCE_PORT_10_BIT_DECODE;
         Descriptor->u.Port.Length = LogDev->Io[i].Description.Length;
         Descriptor->u.Port.Start.LowPart = LogDev->Io[i].CurrentBase;
     }
@@ -289,23 +590,32 @@ IsaFdoCreateResources(
         Descriptor = &ResourceList->List[0].PartialResourceList.PartialDescriptors[ResourceCount++];
         Descriptor->Type = CmResourceTypeDma;
         Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
-        switch (LogDev->Dma[i].Description.Information & 0x3)
-        {
-            case 0x0: Descriptor->Flags |= CM_RESOURCE_DMA_8; break;
-            case 0x1: Descriptor->Flags |= CM_RESOURCE_DMA_8 | CM_RESOURCE_DMA_16; break;
-            case 0x2: Descriptor->Flags |= CM_RESOURCE_DMA_16; break;
-            default: break;
-        }
-        if (LogDev->Dma[i].Description.Information & 0x4)
-            Descriptor->Flags |= CM_RESOURCE_DMA_BUS_MASTER;
-        switch ((LogDev->Dma[i].Description.Information >> 5) & 0x3)
-        {
-            case 0x1: Descriptor->Flags |= CM_RESOURCE_DMA_TYPE_A; break;
-            case 0x2: Descriptor->Flags |= CM_RESOURCE_DMA_TYPE_B; break;
-            case 0x3: Descriptor->Flags |= CM_RESOURCE_DMA_TYPE_F; break;
-            default: break;
-        }
+        Descriptor->Flags = CM_RESOURCE_DMA_8; /* Information byte is ignored */
         Descriptor->u.Dma.Channel = LogDev->Dma[i].CurrentChannel;
+    }
+    for (i = 0; i < RTL_NUMBER_OF(LogDev->MemRange); i++)
+    {
+        if (!LogDev->MemRange[i].CurrentBase)
+            break;
+
+        Descriptor = &ResourceList->List[0].PartialResourceList.PartialDescriptors[ResourceCount++];
+        Descriptor->Type = CmResourceTypeMemory;
+        Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+        Descriptor->Flags = CM_RESOURCE_MEMORY_24; /* Information byte is ignored */
+        Descriptor->u.Memory.Length = LogDev->MemRange[i].Description.Length;
+        Descriptor->u.Memory.Start.QuadPart = LogDev->MemRange[i].CurrentBase;
+    }
+    for (i = 0; i < RTL_NUMBER_OF(LogDev->MemRange32); i++)
+    {
+        if (!LogDev->MemRange32[i].CurrentBase)
+            break;
+
+        Descriptor = &ResourceList->List[0].PartialResourceList.PartialDescriptors[ResourceCount++];
+        Descriptor->Type = CmResourceTypeMemory;
+        Descriptor->ShareDisposition = CmResourceShareDeviceExclusive;
+        Descriptor->Flags = CM_RESOURCE_MEMORY_24; /* Information byte is ignored */
+        Descriptor->u.Memory.Length = LogDev->MemRange32[i].Description.Length;
+        Descriptor->u.Memory.Start.QuadPart = LogDev->MemRange32[i].CurrentBase;
     }
 
     PdoExt->ResourceList = ResourceList;
