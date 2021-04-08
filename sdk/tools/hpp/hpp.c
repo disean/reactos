@@ -12,7 +12,7 @@
 #include <string.h>
 #include <ctype.h>
 
-//#define DBG 1
+// #define DBG 1
 
 #if DBG
 #define trace printf
@@ -428,6 +428,39 @@ ParseInputFile(const char *pszInFile, FILE *fileOut)
             continue;
         }
 
+        /* Check for $if */
+        if (strncmp(pCurrentLine, "$if", 3) == 0)
+        {
+            int val;
+
+            trace("found $if\n");
+
+            /* Increase the if-level */
+            iIfLevel++;
+
+            /* See if we should care */
+            if (iCopyLevel < (iIfLevel - 1))
+            {
+                continue;
+            }
+
+            /* Get beginning of the expression */
+            p1 = GetNextChar(pCurrentLine + 3);
+
+            /* evaluate the expression */
+            val = EvaluateExpression(p1, 0);
+
+            if (val)
+            {
+                iCopyLevel = iIfLevel;
+            }
+            else if (val == -1)
+            {
+                /* Parse error */
+                return -1;
+            }
+        }
+
         /* The rest is only parsed when we are in a true block */
         if (iCopyLevel < iIfLevel)
         {
@@ -512,32 +545,6 @@ ParseInputFile(const char *pszInFile, FILE *fileOut)
             }
         }
 
-        /* Check for $if */
-        else if (strncmp(pCurrentLine, "$if", 3) == 0)
-        {
-            int val;
-
-            trace("found $if\n");
-            /* Increase the if-level */
-            iIfLevel++;
-
-            /* Get beginning of the expression */
-            p1 = GetNextChar(pCurrentLine + 3);
-
-            /* evaluate the expression */
-            val = EvaluateExpression(p1, 0);
-
-            if (val)
-            {
-                iCopyLevel = iIfLevel;
-            }
-            else if (val == -1)
-            {
-                /* Parse error */
-                return -1;
-            }
-        }
-
         /* Check for $include */
         else if (strncmp(pCurrentLine, "$include", 8) == 0)
         {
@@ -604,15 +611,94 @@ main(int argc, char* argv[])
     char *pszInFile, *pszOutFile;
     FILE* fileOut;
     int ret;
+    int i;
 
-    if (argc != 3)
+    if (argc < 3)
     {
-        error("Usage: hpp <inputfile> <outputfile>\n");
+        error("Usage: hpp <inputfile> <outputfile> [-Dsymbol1[=value1] -Dsymbol2[=value2]...]\n");
         exit(1);
     }
 
     pszInFile = convert_path(argv[1]);
     pszOutFile = convert_path(argv[2]);
+
+    for(i = 3; i < argc; i++)
+    {
+        const char *pchName, *pchValue, *p1;
+        size_t cchName, cchValue;
+        PDEFINE pDefine;
+
+        if ((argv[i][0] != '-') || (argv[i][1] != 'D'))
+        {
+            error("Definitions must be of the form -Dsymbol[=value]\n");
+            exit(1);
+        }
+
+        pchName = &argv[i][2];
+        cchName = strxlen(pchName);
+        if (!cchName)
+        {
+            error("Definitions must be of the form -Dsymbol[=value]\n");
+            exit(1);
+        }
+
+        p1 = pchName + cchName;
+
+        /* Check for assignment */
+        if (*p1 == '=')
+        {
+            trace("definition given with assignment\n");
+            pchValue = p1 + 1;
+            cchValue = strxlen(pchValue);
+            if (!cchValue)
+            {
+                error("Definitions must be of the form -Dsymbol[=value]\n");
+                exit(1);
+            }
+        }
+        else if (*p1 != '\0')
+        {
+            error("Definitions must be of the form -Dsymbol[=value]\n");
+            exit(1);
+        }
+        else
+        {
+            pchValue = 0;
+            cchValue = 0;
+        }
+
+        /* Allocate a DEFINE structure */
+        pDefine = malloc(sizeof(DEFINE) + cchName + cchValue + 2);
+        if (pDefine == 0)
+        {
+            error("Failed to allocate %u bytes\n",
+                    sizeof(DEFINE) + cchName + cchValue + 2);
+            exit(1);
+        }
+
+        pDefine->pszName = pDefine->achBuffer;
+        strncpy(pDefine->pszName, pchName, cchName);
+        pDefine->pszName[cchName] = 0;
+        pDefine->cchName = cchName;
+        pDefine->val = 1;
+
+        if (pchValue != 0)
+        {
+            pDefine->pszValue = &pDefine->achBuffer[cchName + 1];
+            strncpy(pDefine->pszValue, pchValue, cchValue);
+            pDefine->pszValue[cchValue] = 0;
+            pDefine->cchValue = cchValue;
+        }
+        else
+        {
+            pDefine->pszValue = 0;
+            pDefine->cchValue = 0;
+        }
+
+        /* Insert the new define into the global list */
+        pDefine->pNext = gpDefines;
+        gpDefines = pDefine;
+    }
 
     fileOut = fopen(pszOutFile, "wb");
     if (fileOut == NULL)
