@@ -542,7 +542,7 @@ Cleanup:
 */
 NTSTATUS
 NTAPI
-RtlCreateSystemVolumeInformationFolder(IN PUNICODE_STRING VolumeRootPath)
+RtlCreateSystemVolumeInformationFolder(IN PCUNICODE_STRING VolumeRootPath)
 {
     OBJECT_ATTRIBUTES ObjectAttributes;
     IO_STATUS_BLOCK IoStatusBlock;

@@ -24,3 +24,21 @@ add_xdk_header(devioctl.template.h sdk/include/psdk/devioctl.h)
 add_xdk_header(ntdef.template.h sdk/include/psdk/ntdef.h)
 add_xdk_header(winnt.template.h sdk/include/psdk/winnt.h)
 add_custom_target(xdk DEPENDS ${xdk_files})
+
+function(add_ndk_header _header)
+    set(_out_file ${REACTOS_BINARY_DIR}/sdk/include/ndk/${_header})
+    set(_temp_file ${CMAKE_CURRENT_BINARY_DIR}/${_header}.tmp)
+    add_custom_command(
+            OUTPUT ${_temp_file}
+            COMMAND native-hpp ${CMAKE_CURRENT_SOURCE_DIR}/${_header} ${_temp_file} -D_NDK_
+            DEPENDS ${_template_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_header} native-hpp)
+
+    add_custom_command(
+        OUTPUT ${_out_file}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${_temp_file} ${_out_file}
+        DEPENDS ${_temp_file})
+    set(ndk_files "${ndk_files};${_out_file}" PARENT_SCOPE)
+endfunction()
+
+add_ndk_header(rtlfuncs.h)
+add_custom_target(ndk DEPENDS ${ndk_files})

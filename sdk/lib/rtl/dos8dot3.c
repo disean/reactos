@@ -32,7 +32,7 @@ RtlpIsShortIllegal(const WCHAR Char)
 }
 
 static USHORT
-RtlpGetCheckSum(PUNICODE_STRING Name)
+RtlpGetCheckSum(PCUNICODE_STRING Name)
 {
     PWCHAR CurrentChar;
     USHORT Hash;
@@ -76,12 +76,15 @@ RtlpGetCheckSum(PUNICODE_STRING Name)
 /*
  * @implemented
  */
+_IRQL_requires_max_(PASSIVE_LEVEL)
+NTSYSAPI
 VOID
 NTAPI
-RtlGenerate8dot3Name(IN PUNICODE_STRING Name,
-                     IN BOOLEAN AllowExtendedCharacters,
-                     IN OUT PGENERATE_NAME_CONTEXT Context,
-                     OUT PUNICODE_STRING Name8dot3)
+RtlGenerate8dot3Name(
+  _In_ PCUNICODE_STRING Name,
+  _In_ BOOLEAN AllowExtendedCharacters,
+  _Inout_ PGENERATE_NAME_CONTEXT Context,
+  _Inout_ PUNICODE_STRING Name8dot3)
 {
     ULONG Length = Name->Length / sizeof(WCHAR);
     ULONG IndexLength;
