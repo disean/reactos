@@ -1322,6 +1322,11 @@ PnpRootPnpControl(
 {
     PPNPROOT_COMMON_DEVICE_EXTENSION DeviceExtension;
     NTSTATUS Status;
+    KIRQL OldIrql;
+
+    PAGED_CODE();
+
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
 
     DeviceExtension = (PPNPROOT_COMMON_DEVICE_EXTENSION)DeviceObject->DeviceExtension;
 
@@ -1341,6 +1346,7 @@ PnpRootPnpControl(
  * RETURNS:
  *     Status
  */
+_IRQL_requires_max_(PASSIVE_LEVEL)
 static NTSTATUS NTAPI
 PnpRootPowerControl(
     IN PDEVICE_OBJECT DeviceObject,
@@ -1349,6 +1355,9 @@ PnpRootPowerControl(
     PPNPROOT_FDO_DEVICE_EXTENSION DeviceExtension;
     PIO_STACK_LOCATION IrpSp;
     NTSTATUS Status;
+    KIRQL OldIrql;
+
+    KeRaiseIrql(DISPATCH_LEVEL, &OldIrql);
 
     DeviceExtension = DeviceObject->DeviceExtension;
     Status = Irp->IoStatus.Status;

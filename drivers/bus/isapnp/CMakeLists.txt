@@ -1,10 +1,18 @@
 
-list(APPEND SOURCE
-    isapnp.c
-    pdo.c
-    fdo.c
-    hardware.c
-    isapnp.h)
+if(ARCH STREQUAL "i386" AND NOT SARCH STREQUAL "xbox")
+    list(APPEND SOURCE
+        fdo.c
+        hardware.c
+        interface.c
+        isapnp.c
+        isapnp.h
+        pdo.c)
+else()
+    list(APPEND SOURCE
+        interface.c
+        isapnp.h
+        stub.c)
+endif()
 
 add_library(isapnp MODULE ${SOURCE} isapnp.rc)
 set_module_type(isapnp kernelmodedriver)
