@@ -964,9 +964,11 @@ HalpIs16BitPortDecodeSupported(VOID)
     return CM_RESOURCE_PORT_16_BIT_DECODE;
 }
 
+static
 VOID
 NTAPI
-HalpAcpiDetectResourceListSize(OUT PULONG ListSize)
+HalpAcpiDetectResourceListSize(
+    _Out_ PULONG ListSize)
 {
     PAGED_CODE();
 
@@ -974,11 +976,14 @@ HalpAcpiDetectResourceListSize(OUT PULONG ListSize)
     *ListSize = HalpFixedAcpiDescTable.sci_int_vector ? 1: 0;
 }
 
+static
 NTSTATUS
 NTAPI
-HalpBuildAcpiResourceList(IN PIO_RESOURCE_REQUIREMENTS_LIST ResourceList)
+HalpBuildAcpiResourceList(
+    _Out_ PIO_RESOURCE_REQUIREMENTS_LIST ResourceList)
 {
     ULONG Interrupt;
+
     PAGED_CODE();
     ASSERT(ResourceList != NULL);
 
@@ -1013,11 +1018,13 @@ HalpBuildAcpiResourceList(IN PIO_RESOURCE_REQUIREMENTS_LIST ResourceList)
 
 NTSTATUS
 NTAPI
-HalpQueryAcpiResourceRequirements(OUT PIO_RESOURCE_REQUIREMENTS_LIST *Requirements)
+HalpQueryAcpiResourceRequirements(
+    _Outptr_ PIO_RESOURCE_REQUIREMENTS_LIST *Requirements)
 {
     PIO_RESOURCE_REQUIREMENTS_LIST RequirementsList;
     ULONG Count = 0, ListSize;
     NTSTATUS Status;
+
     PAGED_CODE();
 
     /* Get ACPI resources */
@@ -1028,35 +1035,27 @@ HalpQueryAcpiResourceRequirements(OUT PIO_RESOURCE_REQUIREMENTS_LIST *Requiremen
     ListSize = FIELD_OFFSET(IO_RESOURCE_REQUIREMENTS_LIST, List[0].Descriptors) +
                (Count * sizeof(IO_RESOURCE_DESCRIPTOR));
     DPRINT("Resource list size: %d\n", ListSize);
-    RequirementsList = ExAllocatePoolWithTag(PagedPool, ListSize, TAG_HAL);
-    if (RequirementsList)
-    {
-        /* Initialize it */
-        RtlZeroMemory(RequirementsList, ListSize);
-        RequirementsList->ListSize = ListSize;
+    RequirementsList = ExAllocatePoolZero(PagedPool, ListSize, TAG_HAL);
+    if (!RequirementsList)
+        return STATUS_INSUFFICIENT_RESOURCES;
 
-        /* Build it */
-        Status = HalpBuildAcpiResourceList(RequirementsList);
-        if (NT_SUCCESS(Status))
-        {
-            /* It worked, return it */
-            *Requirements = RequirementsList;
+    /* Initialize it */
+    RequirementsList->ListSize = ListSize;
 
-            /* Validate the list */
-            ASSERT(RequirementsList->List[0].Count == Count);
-        }
-        else
-        {
-            /* Fail */
-            ExFreePoolWithTag(RequirementsList, TAG_HAL);
-            Status = STATUS_NO_SUCH_DEVICE;
-        }
-    }
-    else
+    /* Build it */
+    Status = HalpBuildAcpiResourceList(RequirementsList);
+    if (!NT_SUCCESS(Status))
     {
-        /* Not enough memory */
-        Status = STATUS_INSUFFICIENT_RESOURCES;
+        /* Fail */
+        ExFreePoolWithTag(RequirementsList, TAG_HAL);
+        return STATUS_NO_SUCH_DEVICE;
     }
+
+    /* It worked, return it */
+    *Requirements = RequirementsList;
+
+    /* Validate the list */
+    ASSERT(RequirementsList->List[0].Count == Count);
 
     /* Return the status */
     return Status;

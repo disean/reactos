@@ -1,16 +1,18 @@
 /*
  * PROJECT:         ReactOS HAL
  * LICENSE:         BSD - See COPYING.ARM in the top level directory
- * FILE:            hal/halx86/legacy/halpnpdd.c
- * PURPOSE:         HAL Plug and Play Device Driver
- * PROGRAMMERS:     ReactOS Portable Systems Group
+ * PURPOSE:         Legacy HAL Plug and Play Device Driver
+ * COPYRIGHT:       ReactOS Portable Systems Group
  */
 
 /* INCLUDES *******************************************************************/
 
 #include <hal.h>
+
 #define NDEBUG
 #include <debug.h>
+
+/* GLOBALS ********************************************************************/
 
 typedef enum _EXTENSION_TYPE
 {
@@ -44,16 +46,15 @@ typedef struct _PDO_EXTENSION
     LONG InterfaceReferenceCount;
 } PDO_EXTENSION, *PPDO_EXTENSION;
 
-/* GLOBALS ********************************************************************/
-
 PDRIVER_OBJECT HalpDriverObject;
 
 /* PRIVATE FUNCTIONS **********************************************************/
 
 NTSTATUS
 NTAPI
-HalpAddDevice(IN PDRIVER_OBJECT DriverObject,
-              IN PDEVICE_OBJECT TargetDevice)
+HalpAddDevice(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PDEVICE_OBJECT TargetDevice)
 {
     NTSTATUS Status;
     PFDO_EXTENSION FdoExtension;
@@ -135,25 +136,29 @@ HalpAddDevice(IN PDRIVER_OBJECT DriverObject,
     return Status;
 }
 
+static
 NTSTATUS
 NTAPI
-HalpQueryInterface(IN PDEVICE_OBJECT DeviceObject,
-                   IN CONST GUID* InterfaceType,
-                   IN USHORT Version,
-                   IN PVOID InterfaceSpecificData,
-                   IN ULONG InterfaceBufferSize,
-                   IN PINTERFACE Interface,
-                   OUT PULONG Length)
+HalpQueryInterface(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ const GUID *InterfaceType,
+    _In_ USHORT Version,
+    _In_ PVOID InterfaceSpecificData,
+    _In_ ULONG InterfaceBufferSize,
+    _In_ PINTERFACE Interface,
+    _Out_ PULONG Length)
 {
     UNIMPLEMENTED;
     return STATUS_NOT_SUPPORTED;
 }
 
+static
 NTSTATUS
 NTAPI
-HalpQueryDeviceRelations(IN PDEVICE_OBJECT DeviceObject,
-                         IN DEVICE_RELATION_TYPE RelationType,
-                         OUT PDEVICE_RELATIONS* DeviceRelations)
+HalpQueryDeviceRelations(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ DEVICE_RELATION_TYPE RelationType,
+    _Inout_ PDEVICE_RELATIONS *DeviceRelations)
 {
     EXTENSION_TYPE ExtensionType;
     PPDO_EXTENSION PdoExtension;
@@ -193,7 +198,8 @@ HalpQueryDeviceRelations(IN PDEVICE_OBJECT DeviceObject,
                                                               Objects) +
                                                  sizeof(PDEVICE_OBJECT) * PdoCount,
                                                  TAG_HAL);
-            if (!FdoRelations) return STATUS_INSUFFICIENT_RESOURCES;
+            if (!FdoRelations)
+                return STATUS_INSUFFICIENT_RESOURCES;
 
             /* Save our count */
             FdoRelations->Count = PdoCount;
@@ -250,7 +256,8 @@ HalpQueryDeviceRelations(IN PDEVICE_OBJECT DeviceObject,
             PdoRelations = ExAllocatePoolWithTag(PagedPool,
                                                  sizeof(DEVICE_RELATIONS),
                                                  TAG_HAL);
-            if (!PdoRelations) return STATUS_INSUFFICIENT_RESOURCES;
+            if (!PdoRelations)
+                return STATUS_INSUFFICIENT_RESOURCES;
 
             /* Fill it out and reference us */
             PdoRelations->Count = 1;
@@ -267,67 +274,58 @@ HalpQueryDeviceRelations(IN PDEVICE_OBJECT DeviceObject,
     return STATUS_NOT_SUPPORTED;
 }
 
+static
 NTSTATUS
 NTAPI
-HalpQueryCapabilities(IN PDEVICE_OBJECT DeviceObject,
-                      OUT PDEVICE_CAPABILITIES Capabilities)
+HalpQueryCapabilities(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PDEVICE_CAPABILITIES Capabilities)
 {
-    //PPDO_EXTENSION PdoExtension;
-    NTSTATUS Status;
     PAGED_CODE();
-
-    /* Get the extension and check for valid version */
-    //PdoExtension = DeviceObject->DeviceExtension;
     ASSERT(Capabilities->Version == 1);
-    if (Capabilities->Version == 1)
-    {
-        /* Can't lock or eject us */
-        Capabilities->LockSupported = FALSE;
-        Capabilities->EjectSupported = FALSE;
 
-        /* Can't remove or dock us */
-        Capabilities->Removable = FALSE;
-        Capabilities->DockDevice = FALSE;
+    if (Capabilities->Version != 1)
+        return STATUS_NOT_SUPPORTED;
 
-        /* Can't access us raw */
-        Capabilities->RawDeviceOK = FALSE;
+    /* Can't lock or eject us */
+    Capabilities->LockSupported = FALSE;
+    Capabilities->EjectSupported = FALSE;
 
-        /* We have a unique ID, and don't bother the user */
-        Capabilities->UniqueID = TRUE;
-        Capabilities->SilentInstall = TRUE;
+    /* Can't remove or dock us */
+    Capabilities->Removable = FALSE;
+    Capabilities->DockDevice = FALSE;
 
-        /* Fill out the adress */
-        Capabilities->Address = InterfaceTypeUndefined;
-        Capabilities->UINumber = InterfaceTypeUndefined;
+    /* Can't access us raw */
+    Capabilities->RawDeviceOK = FALSE;
 
-        /* Fill out latencies */
-        Capabilities->D1Latency = 0;
-        Capabilities->D2Latency = 0;
-        Capabilities->D3Latency = 0;
+    /* We have a unique ID, and don't bother the user */
+    Capabilities->UniqueID = TRUE;
+    Capabilities->SilentInstall = TRUE;
 
-        /* Fill out supported device states */
-        Capabilities->DeviceState[PowerSystemWorking] = PowerDeviceD0;
-        Capabilities->DeviceState[PowerSystemHibernate] = PowerDeviceD3;
-        Capabilities->DeviceState[PowerSystemShutdown] = PowerDeviceD3;
-        Capabilities->DeviceState[PowerSystemSleeping3] = PowerDeviceD3;
+    /* Fill out the adress */
+    Capabilities->Address = InterfaceTypeUndefined;
+    Capabilities->UINumber = InterfaceTypeUndefined;
 
-        /* Done */
-        Status = STATUS_SUCCESS;
-    }
-    else
-    {
-        /* Fail */
-        Status = STATUS_NOT_SUPPORTED;
-    }
+    /* Fill out latencies */
+    Capabilities->D1Latency = 0;
+    Capabilities->D2Latency = 0;
+    Capabilities->D3Latency = 0;
 
-    /* Return status */
-    return Status;
+    /* Fill out supported device states */
+    Capabilities->DeviceState[PowerSystemWorking] = PowerDeviceD0;
+    Capabilities->DeviceState[PowerSystemHibernate] = PowerDeviceD3;
+    Capabilities->DeviceState[PowerSystemShutdown] = PowerDeviceD3;
+    Capabilities->DeviceState[PowerSystemSleeping3] = PowerDeviceD3;
+
+    return STATUS_SUCCESS;
 }
 
+static
 NTSTATUS
 NTAPI
-HalpQueryResources(IN PDEVICE_OBJECT DeviceObject,
-                   OUT PCM_RESOURCE_LIST *Resources)
+HalpQueryResources(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Outptr_ PCM_RESOURCE_LIST *Resources)
 {
     PPDO_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
     NTSTATUS Status;
@@ -336,6 +334,7 @@ HalpQueryResources(IN PDEVICE_OBJECT DeviceObject,
 //    PIO_RESOURCE_DESCRIPTOR Descriptor;
 //    PCM_PARTIAL_RESOURCE_DESCRIPTOR PartialDesc;
 //    ULONG i;
+
     PAGED_CODE();
 
     /* Only the ACPI PDO has requirements */
@@ -419,12 +418,15 @@ HalpQueryResources(IN PDEVICE_OBJECT DeviceObject,
     }
 }
 
+static
 NTSTATUS
 NTAPI
-HalpQueryResourceRequirements(IN PDEVICE_OBJECT DeviceObject,
-                              OUT PIO_RESOURCE_REQUIREMENTS_LIST *Requirements)
+HalpQueryResourceRequirements(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Outptr_ PIO_RESOURCE_REQUIREMENTS_LIST *Requirements)
 {
     PPDO_EXTENSION DeviceExtension = DeviceObject->DeviceExtension;
+
     PAGED_CODE();
 
     /* Only the ACPI PDO has requirements */
@@ -446,11 +448,13 @@ HalpQueryResourceRequirements(IN PDEVICE_OBJECT DeviceObject,
     }
 }
 
+static
 NTSTATUS
 NTAPI
-HalpQueryIdPdo(IN PDEVICE_OBJECT DeviceObject,
-               IN BUS_QUERY_ID_TYPE IdType,
-               OUT PUSHORT *BusQueryId)
+HalpQueryIdPdo(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ BUS_QUERY_ID_TYPE IdType,
+    _Outptr_ PWCHAR *BusQueryId)
 {
     PPDO_EXTENSION PdoExtension;
     PDO_TYPE PdoType;
@@ -543,11 +547,13 @@ HalpQueryIdPdo(IN PDEVICE_OBJECT DeviceObject,
     return Status;
 }
 
+static
 NTSTATUS
 NTAPI
-HalpQueryIdFdo(IN PDEVICE_OBJECT DeviceObject,
-               IN BUS_QUERY_ID_TYPE IdType,
-               OUT PUSHORT *BusQueryId)
+HalpQueryIdFdo(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _In_ BUS_QUERY_ID_TYPE IdType,
+    _Outptr_ PWCHAR *BusQueryId)
 {
     NTSTATUS Status;
     ULONG Length;
@@ -607,8 +613,9 @@ HalpQueryIdFdo(IN PDEVICE_OBJECT DeviceObject,
 
 NTSTATUS
 NTAPI
-HalpDispatchPnp(IN PDEVICE_OBJECT DeviceObject,
-                IN PIRP Irp)
+HalpDispatchPnp(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
 {
     PIO_STACK_LOCATION IoStackLocation;
     //PPDO_EXTENSION PdoExtension;
@@ -817,7 +824,8 @@ HalpDispatchPnp(IN PDEVICE_OBJECT DeviceObject,
         }
 
         /* If it's not supported, inherit the old status */
-        if (Status == STATUS_NOT_SUPPORTED) Status = Irp->IoStatus.Status;
+        if (Status == STATUS_NOT_SUPPORTED)
+            Status = Irp->IoStatus.Status;
 
         /* Complete the IRP */
         DPRINT("IRP completed with status: %lx\n", Status);
@@ -829,8 +837,9 @@ HalpDispatchPnp(IN PDEVICE_OBJECT DeviceObject,
 
 NTSTATUS
 NTAPI
-HalpDispatchWmi(IN PDEVICE_OBJECT DeviceObject,
-                IN PIRP Irp)
+HalpDispatchWmi(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
 {
     UNIMPLEMENTED_DBGBREAK("HAL: PnP Driver WMI!\n");
     return STATUS_SUCCESS;
@@ -838,8 +847,9 @@ HalpDispatchWmi(IN PDEVICE_OBJECT DeviceObject,
 
 NTSTATUS
 NTAPI
-HalpDispatchPower(IN PDEVICE_OBJECT DeviceObject,
-                  IN PIRP Irp)
+HalpDispatchPower(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP Irp)
 {
     PFDO_EXTENSION FdoExtension;
 
@@ -862,8 +872,9 @@ HalpDispatchPower(IN PDEVICE_OBJECT DeviceObject,
 
 NTSTATUS
 NTAPI
-HalpDriverEntry(IN PDRIVER_OBJECT DriverObject,
-                IN PUNICODE_STRING RegistryPath)
+HalpDriverEntry(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PUNICODE_STRING RegistryPath)
 {
     NTSTATUS Status;
     PDEVICE_OBJECT TargetDevice = NULL;
@@ -913,6 +924,7 @@ HaliInitPnpDriver(VOID)
 {
     NTSTATUS Status;
     UNICODE_STRING DriverString;
+
     PAGED_CODE();
 
     /* Create the driver */
