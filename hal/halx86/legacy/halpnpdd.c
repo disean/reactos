@@ -20,10 +20,13 @@ typedef enum _EXTENSION_TYPE
     FdoExtensionType
 } EXTENSION_TYPE;
 
+/** @brief The Root PDO type. */
 typedef enum _PDO_TYPE
 {
-    AcpiPdo = 0x80,
-    WdPdo
+    UnusedPdo = 0x80,
+    PciPdo, /**< @brief PCI System */
+    IsaPdo, /**< @brief ISA System */
+    McaPdo  /**< @brief MCA System */
 } PDO_TYPE;
 
 typedef struct _FDO_EXTENSION
@@ -122,7 +125,7 @@ HalpAddDevice(
     PdoExtension->ExtensionType = PdoExtensionType;
     PdoExtension->PhysicalDeviceObject = PdoDeviceObject;
     PdoExtension->ParentFdoExtension = FdoExtension;
-    PdoExtension->PdoType = AcpiPdo;
+    PdoExtension->PdoType = PciPdo;
 
     /* Add the PDO to the head of the list */
     PdoExtension->Next = FdoExtension->ChildPdoList;
@@ -338,7 +341,7 @@ HalpQueryResources(
     PAGED_CODE();
 
     /* Only the ACPI PDO has requirements */
-    if (DeviceExtension->PdoType == AcpiPdo)
+    if (DeviceExtension->PdoType == PciPdo)
     {
 #if 0
         /* Query ACPI requirements */
@@ -406,11 +409,6 @@ HalpQueryResources(
 
         return STATUS_SUCCESS;
     }
-    else if (DeviceExtension->PdoType == WdPdo)
-    {
-        /* Watchdog doesn't */
-        return STATUS_NOT_SUPPORTED;
-    }
     else
     {
         /* This shouldn't happen */
@@ -430,16 +428,11 @@ HalpQueryResourceRequirements(
     PAGED_CODE();
 
     /* Only the ACPI PDO has requirements */
-    if (DeviceExtension->PdoType == AcpiPdo)
+    if (DeviceExtension->PdoType == PciPdo)
     {
         /* Query ACPI requirements */
 //        return HalpQueryAcpiResourceRequirements(Requirements);
         return STATUS_SUCCESS;
-    }
-    else if (DeviceExtension->PdoType == WdPdo)
-    {
-        /* Watchdog doesn't */
-        return STATUS_NOT_SUPPORTED;
     }
     else
     {
@@ -456,95 +449,70 @@ HalpQueryIdPdo(
     _In_ BUS_QUERY_ID_TYPE IdType,
     _Outptr_ PWCHAR *BusQueryId)
 {
-    PPDO_EXTENSION PdoExtension;
-    PDO_TYPE PdoType;
-    PWCHAR CurrentId;
-    WCHAR Id[100];
-    NTSTATUS Status;
-    ULONG Length = 0;
-    PWCHAR Buffer;
+    PPDO_EXTENSION PdoExtension = DeviceObject->DeviceExtension;
+    USHORT Length;
+    PWCHAR Buffer, IdString;
 
-    /* Get the PDO type */
-    PdoExtension = DeviceObject->DeviceExtension;
-    PdoType = PdoExtension->PdoType;
-
-    /* What kind of ID is being requested? */
-    DPRINT("ID: %d\n", IdType);
     switch (IdType)
     {
         case BusQueryDeviceID:
         case BusQueryHardwareIDs:
+        {
+            static WCHAR RootPciIDs[] = L"PCI_HAL\\PNP0A03\0*PNP0A03\0";
+            static WCHAR RootIsaIDs[] = L"ISA_HAL\\PNP0A00\0*PNP0A00\0";
+            static WCHAR RootMcaIDs[] = L"ISA_HAL\\PNP0A02\0*PNP0A02\0";
 
-            /* What kind of PDO is this? */
-            if (PdoType == AcpiPdo)
+            switch (PdoExtension->PdoType)
             {
-                /* ACPI ID */
-                CurrentId = L"PCI_HAL\\PNP0A03";
-                RtlCopyMemory(Id, CurrentId, (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL));
-                Length += (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
+                case PciPdo:
+                    IdString = RootPciIDs;
+                    Length = sizeof(RootPciIDs);
+                    break;
+                case IsaPdo:
+                    IdString = RootIsaIDs;
+                    Length = sizeof(RootIsaIDs);
+                    break;
+                case McaPdo:
+                    IdString = RootMcaIDs;
+                    Length = sizeof(RootMcaIDs);
+                    break;
 
-                CurrentId = L"*PNP0A03";
-                RtlCopyMemory(&Id[wcslen(Id) + 1], CurrentId, (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL));
-                Length += (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
+                default:
+                    return STATUS_NOT_SUPPORTED;
             }
-#if 0
-            else if (PdoType == WdPdo)
-            {
-                /* WatchDog ID */
-                CurrentId = L"ACPI_HAL\\PNP0C18";
-                RtlCopyMemory(Id, CurrentId, (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL));
-                Length += (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
 
-                CurrentId = L"*PNP0C18";
-                RtlCopyMemory(&Id[wcslen(Id) + 1], CurrentId, (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL));
-                Length += (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
-            }
-#endif
-            else
+            if (IdType == BusQueryDeviceID)
             {
-                /* Unknown */
-                return STATUS_NOT_SUPPORTED;
+                Length -= sizeof(L"*PNPxxxx\0");
             }
+
             break;
+        }
 
         case BusQueryInstanceID:
+        {
+            static WCHAR RootInstanceId[] = L"0";
 
-            /* Instance ID */
-            CurrentId = L"0";
-            RtlCopyMemory(Id, CurrentId, (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL));
-            Length += (wcslen(CurrentId) * sizeof(WCHAR)) + sizeof(UNICODE_NULL);
+            IdString = RootInstanceId;
+            Length = sizeof(RootInstanceId);
+
             break;
+        }
 
         case BusQueryCompatibleIDs:
         default:
-
             /* We don't support anything else */
             return STATUS_NOT_SUPPORTED;
     }
 
-    /* Allocate the buffer */
-    Buffer = ExAllocatePoolWithTag(PagedPool,
-                                   Length + sizeof(UNICODE_NULL),
-                                   TAG_HAL);
-    if (Buffer)
-    {
-        /* Copy the string and null-terminate it */
-        RtlCopyMemory(Buffer, Id, Length);
-        Buffer[Length / sizeof(WCHAR)] = UNICODE_NULL;
+    Buffer = ExAllocatePoolWithTag(PagedPool, Length, TAG_HAL);
+    if (!Buffer)
+        return STATUS_INSUFFICIENT_RESOURCES;
 
-        /* Return string */
-        *BusQueryId = Buffer;
-        Status = STATUS_SUCCESS;
-        DPRINT("Returning: %S\n", *BusQueryId);
-    }
-    else
-    {
-        /* Fail */
-        Status = STATUS_INSUFFICIENT_RESOURCES;
-    }
+    RtlCopyMemory(Buffer, IdString, Length);
 
-    /* Return status */
-    return Status;
+    *BusQueryId = Buffer;
+    return STATUS_SUCCESS;
 }
 
 static
