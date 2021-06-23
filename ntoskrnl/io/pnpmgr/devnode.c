@@ -20,6 +20,12 @@ KSPIN_LOCK IopDeviceTreeLock;
 
 LONG IopNumberDeviceNodes;
 
+extern
+PWSTR
+NTAPI
+PipGetDeviceNodeStateName(
+    _In_ PNP_DEVNODE_STATE State);
+
 /* FUNCTIONS *****************************************************************/
 
 PDEVICE_NODE
@@ -104,6 +110,8 @@ PiInsertDevNode(
     DPRINT("Inserted devnode 0x%p to parent 0x%p\n", DeviceNode, ParentNode);
 }
 
+UNICODE_STRING RdpDevice = RTL_CONSTANT_STRING(L"ISAPNP\\ReadDataPort\\0");
+
 PNP_DEVNODE_STATE
 PiSetDevNodeState(
     _In_ PDEVICE_NODE DeviceNode,
@@ -125,6 +133,16 @@ PiSetDevNodeState(
     KeReleaseSpinLock(&IopDeviceTreeLock, oldIrql);
 
     DPRINT("%wZ Changed state 0x%x => 0x%x\n", &DeviceNode->InstancePath, prevState, NewState);
+
+    if (RtlEqualUnicodeString(&RdpDevice, &DeviceNode->InstancePath, FALSE))
+    {
+        DbgPrint("*** RDP %S (0x%x) => %S (0x%x)\n",
+                 PipGetDeviceNodeStateName(prevState),
+                 prevState,
+                 PipGetDeviceNodeStateName(NewState),
+                 NewState);
+    }
+
     return prevState;
 }
 
