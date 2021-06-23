@@ -556,7 +556,6 @@ IsaPdoStartReadPort(
         return STATUS_REVISION_MISMATCH;
     }
 
-#if 0
     /* Try various Read Ports from the list */
     if (ResourceList->List[0].PartialResourceList.Count > 3)
     {
@@ -612,9 +611,6 @@ IsaPdoStartReadPort(
     }
     /* Set the Read Port */
     else if (ResourceList->List[0].PartialResourceList.Count == 3)
-#else
-    if (ResourceList->List[0].PartialResourceList.Count > 3) /* Temporary HACK */
-#endif
     {
         PdoExt->Flags &= ~ISAPNP_READ_PORT_NEED_REBALANCE;
 
@@ -653,9 +649,7 @@ IsaPdoStartReadPort(
                 else
                 {
                     IsaHwWaitForKey();
-#if 0 /* See the 'if 0' above */
                     break;
-#endif
                 }
             }
         }
