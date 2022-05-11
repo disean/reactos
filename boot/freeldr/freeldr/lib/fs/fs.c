@@ -158,6 +158,8 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
                     FileData[DeviceId].FileFuncTable = NtfsMount(DeviceId);
                 if (!FileData[DeviceId].FileFuncTable)
                     FileData[DeviceId].FileFuncTable = Ext2Mount(DeviceId);
+                if (!FileData[DeviceId].FileFuncTable)
+                    FileData[DeviceId].FileFuncTable = HpfsMount(DeviceId);
 #endif
 #if defined(_M_IX86) || defined(_M_AMD64)
                 if (!FileData[DeviceId].FileFuncTable)

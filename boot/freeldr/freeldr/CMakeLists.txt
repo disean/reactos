@@ -37,6 +37,7 @@ list(APPEND FREELDR_BOOTLIB_SOURCE
     lib/fs/btrfs.c
     lib/fs/ext2.c
     lib/fs/fat.c
+    lib/fs/hpfs.c
     lib/fs/fs.c
     lib/fs/iso.c
     lib/fs/ntfs.c

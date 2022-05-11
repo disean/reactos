@@ -85,6 +85,7 @@
 /* File system headers */
 #include <fs/ext2.h>
 #include <fs/fat.h>
+#include <fs/hpfs.h>
 #include <fs/ntfs.h>
 #include <fs/iso.h>
 #include <fs/pxe.h>
