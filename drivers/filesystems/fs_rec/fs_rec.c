@@ -188,6 +188,12 @@ FsRecFsControl(IN PDEVICE_OBJECT DeviceObject,
             Status = FsRecFatxFsControl(DeviceObject, Irp);
             break;
 
+        case FS_TYPE_HPFS:
+
+            /* Send HPFS command */
+            Status = FsRecHpfsFsControl(DeviceObject, Irp);
+            break;
+
         default:
 
             /* Unrecognized FS */
@@ -481,6 +487,17 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
                              L"\\FatX",
                              L"\\FileSystem\\FatXRecognizer",
                              FS_TYPE_FATX,
+                             FILE_DEVICE_DISK_FILE_SYSTEM,
+                             0);
+    if (NT_SUCCESS(Status)) DeviceCount++;
+
+    /* Register HPFS */
+    Status = FsRecRegisterFs(DriverObject,
+                             NULL,
+                             NULL,
+                             L"\\Pinball",
+                             L"\\FileSystem\\HpfsRecognizer",
+                             FS_TYPE_HPFS,
                              FILE_DEVICE_DISK_FILE_SYSTEM,
                              0);
     if (NT_SUCCESS(Status)) DeviceCount++;

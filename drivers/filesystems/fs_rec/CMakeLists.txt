@@ -7,6 +7,7 @@ list(APPEND SOURCE
     fatx.c
     ffs.c
     fs_rec.c
+    hpfs.c
     ntfs.c
     reiserfs.c
     udfs.c
