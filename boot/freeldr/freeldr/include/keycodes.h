@@ -8,6 +8,34 @@
 
 #pragma once
 
+#if 0 // OLPC
+#define KEY_EXTENDED    // Not needed
+#define KEY_ENTER       0xD
+#define KEY_BACKSPACE   0x8
+#define KEY_DELETE      0x7F
+#define KEY_SPACE       0x20
+#define KEY_LEFTSHIFT   // Nothing
+#define KEY_HOME        0x489B
+#define KEY_UP          0x419B
+#define KEY_DOWN        0x429B
+#define KEY_LEFT        0x449B
+#define KEY_RIGHT       0x439B
+#define KEY_ESC         0x1B
+#define KEY_CAPS_LOCK   // Nothing
+#define KEY_F1          0x504F9B
+#define KEY_F2          0x514F9B
+#define KEY_F3          0x574F9B
+#define KEY_F4          0x784F9B
+#define KEY_F5          0x744F9B
+#define KEY_F6          0x754F9B
+#define KEY_F7          0x714F9B
+#define KEY_F8          0x724F9B
+#define KEY_F9          0x704F9B
+#define KEY_F10         0x4D4F9B
+#define KEY_KEYPAD_PLUS // ?
+#define KEY_END         0x4B9B
+#endif
+
 #if defined(SARCH_PC98)
 #define KEY_EXTENDED    0x00
 #define KEY_ENTER       0x0D

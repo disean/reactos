@@ -1,8 +1,8 @@
 
 if(ARCH STREQUAL "i386")
-    set(SARCH "pc" CACHE STRING
+    set(SARCH "olpc" CACHE STRING
     "Sub-architecture to build for. Specify one of:
-     pc pc98 xbox")
+     olpc pc pc98 xbox")
 elseif(ARCH STREQUAL "amd64")
     set(SARCH "" CACHE STRING
     "Sub-architecture to build for.")

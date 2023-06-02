@@ -52,6 +52,8 @@ EXTERN __bss_start__:DWORD
 EXTERN __bss_end__:DWORD
 #endif
 
+EXTERN _BootMain:PROC
+EXTERN _OFwClientInterfaceHandler:DWORD
 
 #ifdef _USE_ML
 .MBDATA SEGMENT PUBLIC 'DATA'
@@ -91,6 +93,34 @@ ASSUME ES:NOTHING, FS:NOTHING, GS:NOTHING
 MultibootEntry:
     cld
 
+    /* Check for OFW boot */
+    cmp eax, HEX(4F4C5043)
+    jne mbchk_signature
+
+    /* Store the pointer to OFW */
+    mov dword ptr ds:[_OFwClientInterfaceHandler], esi
+
+    /* Clean out BSS */
+    xor eax, eax
+    mov edi, offset __bss_start__
+    mov ecx, offset __bss_end__ + 3
+    sub ecx, edi
+    shr ecx, 2
+    rep stosd
+
+    /* Setup a stack */
+    mov esp, STACKADDR
+
+    // TODO: Build the command line?
+    push eax
+
+    /* GO! */
+    call _BootMain
+
+    /* We should never get here */
+    jmp mbfail
+
+mbchk_signature:
     /* Check for valid multiboot signature */
     cmp eax, MULTIBOOT_BOOTLOADER_MAGIC
     jne mbfail

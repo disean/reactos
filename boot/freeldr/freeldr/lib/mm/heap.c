@@ -118,7 +118,7 @@ FrLdrHeapCreate(
         PreviousSize = Block->Size;
         Block = Block + Block->Size + 1;
 
-        TRACE("Remaining = %ld\n", Remaining);
+        //TRACE("Remaining = %ld\n", Remaining);
     }
 
     /* Now finish with a terminating block */

@@ -341,7 +341,7 @@ LoadAndBootDevice(
 
 #ifndef UEFIBOOT
     /* Boot the loaded sector code */
-    ChainLoadBiosBootSectorCode(DriveNumber, PartitionNumber);
+    //ChainLoadBiosBootSectorCode(DriveNumber, PartitionNumber);
 #endif
     /* Must not return! */
     return ESUCCESS;

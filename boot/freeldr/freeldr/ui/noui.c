@@ -95,7 +95,7 @@ VOID NoUiMessageBoxCritical(PCSTR MessageText)
     // and have encountered an error. Just use printf()
     // and return.
     printf("%s\n", MessageText);
-    printf("Press any key\n");
+    printf("Press any key TODO crash\n");
     MachConsGetCh();
 }
 

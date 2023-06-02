@@ -22,12 +22,12 @@
 
 #if DBG
 
-// #define DEBUG_ALL
-// #define DEBUG_WARN
-// #define DEBUG_ERR
-// #define DEBUG_INIFILE
-// #define DEBUG_REACTOS
-// #define DEBUG_CUSTOM
+#define DEBUG_ALL
+#define DEBUG_WARN
+#define DEBUG_ERR
+#define DEBUG_INIFILE
+#define DEBUG_REACTOS
+#define DEBUG_CUSTOM
 #define DEBUG_NONE
 
 #define DBG_DEFAULT_LEVELS (ERR_LEVEL|FIXME_LEVEL)
@@ -196,9 +196,11 @@ Done:
     /* Try to initialize the port; if it fails, remove the corresponding flag */
     if (DebugPort & RS232)
     {
-        if (!Rs232PortInitialize(ComPort, BaudRate))
-            DebugPort &= ~RS232;
+//        if (!Rs232PortInitialize(ComPort, BaudRate))
+ //           DebugPort &= ~RS232;
     }
+
+    /* DebugPort = SCREEN; */
 }
 
 VOID DebugPrintChar(UCHAR Character)
@@ -297,6 +299,8 @@ DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, .
     {
         DebugPrintChar(*ptr++);
     }
+
+    /* MachConsGetCh(); */
 }
 
 VOID

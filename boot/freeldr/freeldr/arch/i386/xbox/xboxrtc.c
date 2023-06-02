@@ -31,7 +31,6 @@ HalpQueryCMOS(UCHAR Reg)
 
   WRITE_PORT_UCHAR((PUCHAR)0x70, Reg);
   Val = READ_PORT_UCHAR((PUCHAR)0x71);
-  WRITE_PORT_UCHAR((PUCHAR)0x70, 0);
 
   return(Val);
 }

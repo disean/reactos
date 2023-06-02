@@ -105,7 +105,10 @@
 #include <arch/i386/drivemap.h>
 #endif
 #if defined(_M_IX86)
-#if defined(SARCH_PC98)
+#if defined(SARCH_OLPC)
+#include <arch/i386/macholpc.h>
+#include <arch/i386/ofwsup.h>
+#elif defined(SARCH_PC98)
 #include <arch/i386/machpc98.h>
 #elif defined(SARCH_XBOX)
 #include <arch/pc/machpc.h>

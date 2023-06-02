@@ -1,7 +1,7 @@
 ##
 ## PROJECT:     FreeLoader
 ## LICENSE:     GPL-2.0-or-later (https://spdx.org/licenses/GPL-2.0-or-later)
-## PURPOSE:     Build definitions for PC-AT and "compatibles" (NEC PC-98, XBOX)
+## PURPOSE:     Build definitions for PC-AT and "compatibles" (NEC PC-98, OLPC XO-1, OG Xbox)
 ## COPYRIGHT:   Copyright 2003 Brian Palmer <brianp@sginet.com>
 ##              Copyright 2011-2014 Amine Khaldi <amine.khaldi@reactos.org>
 ##              Copyright 2011-2014 Timo Kreuzer <timo.kreuzer@reactos.org>
@@ -10,15 +10,22 @@
 ##
 
 if(ARCH STREQUAL "i386")
-    CreateBootSectorTarget(frldr16
-        ${CMAKE_CURRENT_SOURCE_DIR}/arch/realmode/i386.S
-        ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
-        F800)
+    if(SARCH STREQUAL "olpc")
+        CreateBootSectorTarget(frldr16
+            ${CMAKE_CURRENT_SOURCE_DIR}/arch/i386/olpc/startup.S
+            ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
+            0)
+    else()
+        CreateBootSectorTarget(frldr16
+            ${CMAKE_CURRENT_SOURCE_DIR}/arch/realmode/i386.S
+            ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
+            F800) # FREELDR_BASE
+    endif()
 elseif(ARCH STREQUAL "amd64")
     CreateBootSectorTarget(frldr16
         ${CMAKE_CURRENT_SOURCE_DIR}/arch/realmode/amd64.S
         ${CMAKE_CURRENT_BINARY_DIR}/frldr16.bin
-        F800)
+        F800) # FREELDR_BASE
 endif()
 
 
@@ -59,7 +66,7 @@ if(ARCH STREQUAL "i386")
         # arch/i386/i386bug.c
         arch/i386/i386idt.c)
 
-    if(SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox")
+    if(SARCH STREQUAL "olpc" OR SARCH STREQUAL "pc98" OR SARCH STREQUAL "xbox")
         # These machine types require built-in bitmap font
         list(APPEND PCATLDR_ARC_SOURCE
             arch/vgafont.c)
@@ -97,6 +104,23 @@ if(ARCH STREQUAL "i386")
             arch/i386/pc98/pc98mem.c
             arch/i386/pc98/pc98rtc.c
             arch/i386/pc98/pc98video.c)
+
+    elseif(SARCH STREQUAL "olpc")
+        list(APPEND PCATLDR_COMMON_ASM_SOURCE
+            arch/i386/olpc/ofwcall.S
+            arch/i386/olpc/olpcidle.S)
+
+        list(APPEND PCATLDR_ARC_SOURCE
+            arch/i386/pc/pcmem.c
+            arch/i386/olpc/macholpc.c
+            arch/i386/olpc/ofwcons.c
+            arch/i386/olpc/ofwdisk.c
+            arch/i386/olpc/ofwiface.c
+            arch/i386/olpc/ofwmem.c
+            arch/i386/olpc/ofwvideo.c
+            arch/i386/olpc/olpchw.c
+            arch/i386/xbox/xboxrtc.c)
+
     else()
         list(APPEND PCATLDR_ARC_SOURCE
             arch/i386/pc/machpc.c
@@ -171,7 +195,7 @@ set(PCH_SOURCE
     ${PCATLDR_BOOTMGR_SOURCE}
     ${FREELDR_NTLDR_SOURCE})
 
-add_pch(freeldr_common include/freeldr.h PCH_SOURCE)
+# add_pch(freeldr_common include/freeldr.h PCH_SOURCE)
 add_dependencies(freeldr_common bugcodes asm xdk)
 
 ## GCC builds need this extra thing for some reason...
@@ -212,7 +236,7 @@ else()
                     COMMAND ${CMAKE_STRIP} --strip-all $<TARGET_FILE:freeldr_pe>)
 endif()
 
-set_image_base(freeldr_pe 0x10000)
+set_image_base(freeldr_pe 0x10000) # FREELDR_PE_BASE
 set_subsystem(freeldr_pe native)
 set_entrypoint(freeldr_pe RealEntryPoint)
 

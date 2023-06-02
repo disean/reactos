@@ -42,13 +42,39 @@ CCHAR FrLdrBootPath[MAX_PATH] = "";
 
 VOID __cdecl BootMain(IN PCCH CmdLine)
 {
-    CmdLineParse(CmdLine);
+#if defined(SARCH_OLPC)
+    if (!OFwInitialize())
+    {
+#if defined(_MSC_VER)
+        __asm
+        {
+            int 1
+        }
+#else
+        __asm__ ("int $1");
+#endif
+    }
+
+    OFwConsPutChar('O');
+    OFwConsPutChar('K');
+    OFwConsPutChar('\n');
+#endif
+
+    /* CmdLineParse("debug=DEBUGPORT=SCREEN;"); */
+    CmdLineParse("");
 
     /* Debugger pre-initialization */
     DebugInit(0);
 
     MachInit(CmdLine);
+#if 0
+    FrLdrBugCheckWithMessage(MISSING_HARDWARE_REQUIREMENTS,
+                             __FILE__,
+                             __LINE__,
+                             "Test Bug Check.\n\n");
 
+    while (1) { };
+#endif
     TRACE("BootMain() called.\n");
 
 #ifndef UEFIBOOT

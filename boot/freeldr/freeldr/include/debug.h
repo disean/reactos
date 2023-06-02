@@ -40,6 +40,9 @@
 
 #if DBG
 
+#include <string.h>
+#define __FILENAME__ (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
+
     VOID    DebugInit(IN ULONG_PTR FrLdrSectionId);
     ULONG   DbgPrint(const char *Format, ...);
     VOID    DbgPrint2(ULONG Mask, ULONG Level, const char *File, ULONG Line, char *Format, ...);
@@ -56,19 +59,19 @@
 
     #define DBG_DEFAULT_CHANNEL(ch) static int DbgDefaultChannel = DPRINT_##ch
 
-    #define ERR_CH(ch, fmt, ...)    DbgPrint2(DPRINT_##ch, ERR_LEVEL, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-    #define FIXME_CH(ch, fmt, ...)  DbgPrint2(DPRINT_##ch, FIXME_LEVEL, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-    #define WARN_CH(ch, fmt, ...)   DbgPrint2(DPRINT_##ch, WARN_LEVEL, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-    #define TRACE_CH(ch, fmt, ...)  DbgPrint2(DPRINT_##ch, TRACE_LEVEL, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    #define ERR_CH(ch, fmt, ...)    DbgPrint2(DPRINT_##ch, ERR_LEVEL, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+    #define FIXME_CH(ch, fmt, ...)  DbgPrint2(DPRINT_##ch, FIXME_LEVEL, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+    #define WARN_CH(ch, fmt, ...)   DbgPrint2(DPRINT_##ch, WARN_LEVEL, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+    #define TRACE_CH(ch, fmt, ...)  DbgPrint2(DPRINT_##ch, TRACE_LEVEL, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
 
-    #define ERR(fmt, ...)    DbgPrint2(DbgDefaultChannel, ERR_LEVEL, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-    #define FIXME(fmt, ...)  DbgPrint2(DbgDefaultChannel, FIXME_LEVEL, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-    #define WARN(fmt, ...)   DbgPrint2(DbgDefaultChannel, WARN_LEVEL, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
-    #define TRACE(fmt, ...)  DbgPrint2(DbgDefaultChannel, TRACE_LEVEL, __FILE__, __LINE__, fmt, ##__VA_ARGS__)
+    #define ERR(fmt, ...)    DbgPrint2(DbgDefaultChannel, ERR_LEVEL, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+    #define FIXME(fmt, ...)  DbgPrint2(DbgDefaultChannel, FIXME_LEVEL, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+    #define WARN(fmt, ...)   DbgPrint2(DbgDefaultChannel, WARN_LEVEL, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
+    #define TRACE(fmt, ...)  DbgPrint2(DbgDefaultChannel, TRACE_LEVEL, __FILENAME__, __LINE__, fmt, ##__VA_ARGS__)
 
-    #define UNIMPLEMENTED DbgPrint("(%s:%d) WARNING: %s is UNIMPLEMENTED!\n", __FILE__, __LINE__, __FUNCTION__);
+    #define UNIMPLEMENTED DbgPrint("(%s:%d) WARNING: %s is UNIMPLEMENTED!\n", __FILENAME__, __LINE__, __FUNCTION__);
 
-    #define BugCheck(fmt, ...)              do { DbgPrint("(%s:%d) Fatal Error in %s: " fmt, __FILE__, __LINE__, __FUNCTION__, ##__VA_ARGS__); for (;;); } while (0)
+    #define BugCheck(fmt, ...)              do { DbgPrint("(%s:%d) Fatal Error in %s: " fmt, __FILENAME__, __LINE__, __FUNCTION__, ##__VA_ARGS__); for (;;); } while (0)
     #define DbgDumpBuffer(mask, buf, len)    DebugDumpBuffer(mask, buf, len)
 
 #ifdef __i386__

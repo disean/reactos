@@ -101,14 +101,14 @@ stop:
     nop
 
 
-PUBLIC _Reboot
-_Reboot:
-    /* Stop the floppy drive motor */
-    call _DiskStopFloppyMotor
-
-    /* Set the function ID and switch to real mode (we don't return) */
-    mov bx, FNID_Reboot
-    jmp SwitchToReal
+//PUBLIC _Reboot
+//_Reboot:
+//    /* Stop the floppy drive motor */
+//    call _DiskStopFloppyMotor
+//
+//    /* Set the function ID and switch to real mode (we don't return) */
+//    mov bx, FNID_Reboot
+//    jmp SwitchToReal
 
 
 /*

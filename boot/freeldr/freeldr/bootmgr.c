@@ -198,7 +198,7 @@ VOID LoadOperatingSystem(IN OperatingSystemItem* OperatingSystem)
 #ifdef _M_IX86
 #ifndef UEFIBOOT
     /* Install the drive mapper according to this section drive mappings */
-    DriveMapMapDrivesInSection(SectionId);
+    //DriveMapMapDrivesInSection(SectionId);
 #endif
 #endif
 

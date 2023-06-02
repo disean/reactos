@@ -245,6 +245,8 @@ Enable this if the module uses typeid or dynamic_cast. You will probably need to
             add_definitions(-DSARCH_XBOX)
         elseif(SARCH STREQUAL "pc98")
             add_definitions(-DSARCH_PC98)
+        elseif(SARCH STREQUAL "olpc")
+            add_definitions(-DSARCH_OLPC)
         endif()
     elseif(ARCH STREQUAL "amd64")
         # clang-cl defines this one for itself

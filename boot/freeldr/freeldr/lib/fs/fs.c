@@ -161,8 +161,8 @@ ARC_STATUS ArcOpen(CHAR* Path, OPENMODE OpenMode, ULONG* FileId)
 #endif
 #if defined(_M_IX86) || defined(_M_AMD64)
 #ifndef UEFIBOOT
-                if (!FileData[DeviceId].FileFuncTable)
-                    FileData[DeviceId].FileFuncTable = PxeMount(DeviceId);
+                //if (!FileData[DeviceId].FileFuncTable)
+                //    FileData[DeviceId].FileFuncTable = PxeMount(DeviceId);
 #endif
 #endif
                 if (!FileData[DeviceId].FileFuncTable)
