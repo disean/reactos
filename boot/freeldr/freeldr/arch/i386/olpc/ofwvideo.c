@@ -690,3 +690,77 @@ OFwVideoInit(VOID)
 
     return TRUE;
 }
+
+#define KM_FB              0xFFC00000
+#define KM_FB_BPP          2
+#define KM_WIDTH           1200
+#define KM_HEIGHT          (900 / 2)
+#define TOP_BOTTOM_LINES   0
+
+VOID
+KmVideoScrollUp(VOID)
+{
+    ULONG PixelCount, BgColor;
+    PUSHORT Src = (PUSHORT)((PUCHAR)KM_FB + CHAR_HEIGHT * VidpScreenStride);
+    PUSHORT Dst = (PUSHORT)((PUCHAR)KM_FB);
+
+    PixelCount = VidpScreenStride * (KM_HEIGHT - CHAR_HEIGHT) / KM_FB_BPP;
+
+    while (PixelCount--)
+        *Dst++ = *Src++;
+
+    BgColor = OFwpVideoAttrToSingleColor(ATT_BG_COLOR(COLOR_BLACK));
+
+    for (PixelCount = 0; PixelCount < ((VidpScreenStride * CHAR_HEIGHT) / KM_FB_BPP); PixelCount++)
+        *Dst++ = BgColor;
+}
+
+VOID
+OFwConsPutCharKernelMode(
+    int c)
+{
+    BOOLEAN NeedScroll;
+    static ULONG CurrentCursorX = 0;
+    static ULONG CurrentCursorY = 0;
+
+    NeedScroll = (CurrentCursorY >= (KM_HEIGHT/CHAR_HEIGHT));
+    if (NeedScroll)
+    {
+        KmVideoScrollUp();
+        --CurrentCursorY;
+    }
+
+    if (c == '\r')
+    {
+        CurrentCursorX = 0;
+    }
+    else if (c == '\n')
+    {
+        CurrentCursorX = 0;
+
+        if (!NeedScroll)
+            ++CurrentCursorY;
+    }
+    else if (c == '\t')
+    {
+        CurrentCursorX = (CurrentCursorX + 8) & ~ 7;
+    }
+    else
+    {
+        ULONG FgColor = OFwpVideoAttrToSingleColor(ATT_FG_COLOR(0x0f));
+        ULONG BgColor = OFwpVideoAttrToSingleColor(ATT_BG_COLOR(0x0f));
+
+        ULONG_PTR Pixel = (ULONG_PTR)KM_FB +
+                          CurrentCursorY * VidpScreenStride * CHAR_HEIGHT +
+                          CurrentCursorX * VidpBytesPerPixel * CHAR_WIDTH;
+
+        OFwpVideoDisplayCharacter(Pixel, c, FgColor, BgColor);
+        CurrentCursorX++;
+    }
+
+    if (CurrentCursorX >= (KM_WIDTH / CHAR_WIDTH))
+    {
+        CurrentCursorX = 0;
+        CurrentCursorY++;
+    }
+}

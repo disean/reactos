@@ -70,3 +70,7 @@ OFwConsGetCh(VOID);
 
 TIMEINFO*
 XboxGetTime(VOID);
+
+VOID
+OFwConsPutCharKernelMode(
+    int c);

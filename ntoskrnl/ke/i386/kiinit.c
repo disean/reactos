@@ -29,7 +29,30 @@ KSPIN_LOCK Ki486CompatibilityLock;
 ULONG ProcessCount;
 ULONGLONG BootCycles, BootCyclesEnd;
 
+ULONG (*FrLdrPutChar)(int c);
+
 /* FUNCTIONS *****************************************************************/
+
+ULONG
+DbgPrintEarly(const char *fmt, ...)
+{
+    va_list args;
+    char Buffer[1024];
+    PCHAR String = Buffer;
+
+    va_start(args, fmt);
+    vsprintf(Buffer, fmt, args);
+    va_end(args);
+
+    /* Output the message */
+    while (*String != 0)
+    {
+        FrLdrPutChar(*String);
+        String++;
+    }
+
+    return STATUS_SUCCESS;
+}
 
 CODE_SEG("INIT")
 VOID
@@ -732,6 +755,11 @@ KiSystemStartup(IN PLOADER_PARAMETER_BLOCK LoaderBlock)
 
     /* Boot cycles timestamp */
     BootCycles = __rdtsc();
+
+    /* HACK */
+    FrLdrPutChar = LoaderBlock->u.I386.CommonDataArea;
+
+    DbgPrint("Hello from KiSystemStartup!!!\n");
 
     /* Save the loader block and get the current CPU */
     KeLoaderBlock = LoaderBlock;

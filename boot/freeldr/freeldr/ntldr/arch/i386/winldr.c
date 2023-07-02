@@ -357,7 +357,7 @@ MempUnmapPage(PFN_NUMBER Page)
     }
 }
 
-static
+//static
 VOID
 WinLdrpMapApic(VOID)
 {
@@ -393,6 +393,8 @@ static
 BOOLEAN
 WinLdrMapSpecialPages(void)
 {
+    ULONG i;
+
     TRACE("HalPageTable: 0x%X\n", HalPageTable);
 
     /*
@@ -408,11 +410,19 @@ WinLdrMapSpecialPages(void)
     HalPageTable[(KIP0PCRADDRESS - 0xFFC00000) >> MM_PAGE_SHIFT].Write = 1;
 
     /* Map APIC */
-    WinLdrpMapApic();
+    //WinLdrpMapApic();
 
     /* Map VGA memory */
     //VideoMemoryBase = MmMapIoSpace(0xb8000, 4000, MmNonCached);
     //TRACE("VideoMemoryBase: 0x%X\n", VideoMemoryBase);
+
+    /* Map the framebuffer from 0xFD000000 to 0xFFC00000 */
+    for (i = 0; i < 512; ++i)
+    {
+        HalPageTable[i].PageFrameNumber = (0xFD000000 + i * PAGE_SIZE) >> MM_PAGE_SHIFT;
+        HalPageTable[i].Valid = 1;
+        HalPageTable[i].Write = 1;
+    }
 
     return TRUE;
 }
@@ -450,7 +460,7 @@ void WinLdrSetupMachineDependent(PLOADER_PARAMETER_BLOCK LoaderBlock)
     ULONG_PTR Tss = 0;
     ULONG BlockSize, NumPages;
 
-    LoaderBlock->u.I386.CommonDataArea = NULL; // Force No ABIOS support
+    LoaderBlock->u.I386.CommonDataArea = (PVOID)OFwConsPutCharKernelMode; // HACK
     LoaderBlock->u.I386.MachineType = MACHINE_TYPE_ISA;
 
     /* Allocate 2 pages for PCR: one for the boot processor PCR and one for KI_USER_SHARED_DATA */
@@ -516,8 +526,8 @@ WinLdrSetProcessorContext(void)
     Pcr = KIP0PCRADDRESS;
     Tss = KSEG0_BASE | (TssBasePage << MM_PAGE_SHIFT);
 
-    TRACE("GdtIdt %p, Pcr %p, Tss 0x%08x\n",
-          GdtIdt, Pcr, Tss);
+    /* TRACE("GdtIdt %p, Pcr %p, Tss 0x%08x\n", */
+          /* GdtIdt, Pcr, Tss); */
 
     /* Enable paging */
     //BS->ExitBootServices(ImageHandle,MapKey);

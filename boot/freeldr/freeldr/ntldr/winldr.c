@@ -1146,6 +1146,10 @@ LoadAndBootWindows(
                                     BootPath);
 }
 
+extern
+VOID
+DebugEnableScreenPort(VOID);
+
 ARC_STATUS
 LoadAndBootWindowsCommon(
     IN USHORT OperatingSystemVersion,
@@ -1250,11 +1254,14 @@ LoadAndBootWindowsCommon(
     /* Zero KI_USER_SHARED_DATA page */
     RtlZeroMemory((PVOID)KI_USER_SHARED_DATA, MM_PAGE_SIZE);
 
-    WinLdrpDumpMemoryDescriptors(LoaderBlockVA);
-    WinLdrpDumpBootDriver(LoaderBlockVA);
+    /* WinLdrpDumpMemoryDescriptors(LoaderBlockVA); */
+    /* WinLdrpDumpBootDriver(LoaderBlockVA); */
 #ifndef _M_AMD64
-    WinLdrpDumpArcDisks(LoaderBlockVA);
+    /* WinLdrpDumpArcDisks(LoaderBlockVA); */
 #endif
+
+    DebugEnableScreenPort();
+    MachVtbl.ConsPutChar = OFwConsPutCharKernelMode;
 
     /* Pass control */
     (*KiSystemStartup)(LoaderBlockVA);

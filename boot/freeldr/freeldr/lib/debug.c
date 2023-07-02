@@ -25,10 +25,10 @@
 #define DEBUG_ALL
 #define DEBUG_WARN
 #define DEBUG_ERR
-#define DEBUG_INIFILE
-#define DEBUG_REACTOS
-#define DEBUG_CUSTOM
-#define DEBUG_NONE
+//#define DEBUG_INIFILE
+//#define DEBUG_REACTOS
+//#define DEBUG_CUSTOM
+//#define DEBUG_NONE
 
 #define DBG_DEFAULT_LEVELS (ERR_LEVEL|FIXME_LEVEL)
 
@@ -340,6 +340,12 @@ VOID
 DebugDisableScreenPort(VOID)
 {
     DebugPort &= ~SCREEN;
+}
+
+VOID
+DebugEnableScreenPort(VOID)
+{
+    DebugPort |= SCREEN;
 }
 
 static BOOLEAN
