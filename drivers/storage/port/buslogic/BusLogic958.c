@@ -104,6 +104,11 @@ DriverEntry(IN PVOID DriverObject,
 
     DebugPrint((TRACE,"\n BusLogic -  Inside the DriverEntry function \n"));
 
+    if (IsNEC_98)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
     // Zero out structure.
     for (i = 0; i < sizeof(HW_INITIALIZATION_DATA); i++)
     {

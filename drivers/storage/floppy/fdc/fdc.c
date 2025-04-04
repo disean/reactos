@@ -181,6 +181,11 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
 {
     DPRINT("FDC: DriverEntry()\n");
 
+    if (IsNEC_98)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
     DriverObject->MajorFunction[IRP_MJ_CREATE] = FdcCreate;
     DriverObject->MajorFunction[IRP_MJ_CLOSE] = FdcClose;
 //    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = FdcDeviceControl;

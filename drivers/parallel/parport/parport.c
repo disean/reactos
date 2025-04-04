@@ -126,6 +126,11 @@ DriverEntry(IN PDRIVER_OBJECT DriverObject,
 
     DPRINT("Parport DriverEntry\n");
 
+    if (IsNEC_98)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
     DriverObject->DriverUnload = DriverUnload;
     DriverObject->DriverExtension->AddDevice = AddDevice;
 

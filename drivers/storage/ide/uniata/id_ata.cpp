@@ -10706,6 +10706,11 @@ DriverEntry(
     KdPrint2((PRINT_PREFIX "%s", (PCCHAR)ver_string));
     //a = (WCHAR)strlen(ver_string);
 
+    if (IsNEC_98)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
     statusToReturn = 0xffffffff;
 
     // Zero out structure.

@@ -486,6 +486,11 @@ DriverEntry(
 	PI8042_DRIVER_EXTENSION DriverExtension;
 	NTSTATUS Status;
 
+    if (IsNEC_98)
+    {
+        return STATUS_NOT_IMPLEMENTED;
+    }
+
 	Status = IoAllocateDriverObjectExtension(
 		DriverObject,
 		DriverObject,
