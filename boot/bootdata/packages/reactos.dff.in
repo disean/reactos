@@ -126,9 +126,6 @@ Signature = "$Windows NT$"
 "modules/optional/qxl.cat"                            6  optional
 "modules/optional/qxl.sys"                            3  optional
 "modules/optional/qxldd.dll"                          2  optional
-"modules/optional/b57win32.inf"                       6  optional
-"modules/optional/b57win32.cat"                       6  optional
-"modules/optional/b57xp32.sys"                        3  optional
 "modules/optional/bcmwl5.inf"                         6  optional
 "modules/optional/bcm43xx.cat"                        6  optional
 "modules/optional/bcmwl5.sys"                         3  optional
