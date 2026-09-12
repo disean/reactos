@@ -321,45 +321,49 @@ NICOutputDebugInfo(
 
 FORCEINLINE
 ULONG
-B57XXReadPciConfigULong(
+B57XXReadPciConfig32(
     _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG Offset,
-    _Out_ PULONG pValue)
+    _In_ ULONG Offset)
 {
-    return NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle,
-                                      0,
-                                      Offset,
-                                      (PVOID)pValue,
-                                      sizeof(ULONG));
+    ULONG Value;
+
+    NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle,
+                               0,
+                               Offset,
+                               &Value,
+                               sizeof(Value));
+    return Value;
 }
 
 FORCEINLINE
-ULONG
-B57XXWritePciConfigULong(
+VOID
+B57XXWritePciConfig32(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Offset,
     _In_ ULONG Value)
 {
-    return NdisWritePciSlotInformation(Adapter->MiniportAdapterHandle,
-                                       0,
-                                       Offset,
-                                       (PVOID)&Value,
-                                       sizeof(ULONG));
+    NdisWritePciSlotInformation(Adapter->MiniportAdapterHandle,
+                                0,
+                                Offset,
+                                &Value,
+                                sizeof(Value));
 }
 
 FORCEINLINE
-VOID
-B57XXReadULong(
+ULONG
+B57XXReadReg(
     _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG Address,
-    _Out_ PULONG pValue)
+    _In_ ULONG Address)
 {
-    NdisReadRegisterUlong((PULONG)(Adapter->IoBase + Address), pValue);
+    ULONG Value;
+
+    NdisReadRegisterUlong((PULONG)(Adapter->IoBase + Address), &Value);
+    return Value;
 }
 
 FORCEINLINE
 VOID
-B57XXWriteULong(
+B57XXWriteReg(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
     _In_ ULONG Value)
@@ -369,67 +373,69 @@ B57XXWriteULong(
 
 FORCEINLINE
 VOID
-B57XXEnableULong(
+B57XXEnableReg(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
-    _Inout_ PULONG pValue,
     _In_ ULONG Mask)
 {
-    B57XXReadULong(Adapter, Address, pValue);
-    *pValue |= Mask;
-    B57XXWriteULong(Adapter, Address, *pValue);
+    ULONG Value;
+
+    Value = B57XXReadReg(Adapter, Address);
+    Value |= Mask;
+    B57XXWriteReg(Adapter, Address, Value);
 }
 
 FORCEINLINE
-VOID
-B57XXReadRegister(
+ULONG
+B57XXReadRegInd(
     _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG Address,
-    _Out_ PULONG pValue)
+    _In_ ULONG Address)
 {
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_REG_BASE, Address);
-    B57XXReadPciConfigULong(Adapter, B57XX_REG_REG_DATA, pValue);
+    B57XXWritePciConfig32(Adapter, B57XX_REG_REG_BASE, Address);
+    return B57XXReadPciConfig32(Adapter, B57XX_REG_REG_DATA);
 }
 
 FORCEINLINE
 VOID
-B57XXWriteRegister(
+B57XXWriteRegInd(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
     _In_ ULONG Value)
 {
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_REG_BASE, Address);
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_REG_DATA, Value);
+    B57XXWritePciConfig32(Adapter, B57XX_REG_REG_BASE, Address);
+    B57XXWritePciConfig32(Adapter, B57XX_REG_REG_DATA, Value);
 
-    B57XXWriteULong(Adapter, Address, Value);
+    B57XXWriteReg(Adapter, Address, Value);
 }
 
 FORCEINLINE
 VOID
-B57XXEnableRegister(
+B57XXEnableRegInd(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
-    _Inout_ PULONG pValue,
     _In_ ULONG Mask)
 {
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_REG_BASE, Address);
-    B57XXReadPciConfigULong(Adapter, B57XX_REG_REG_DATA, pValue);
-    *pValue |= Mask;
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_REG_DATA, *pValue);
+    ULONG Value;
+
+    B57XXWritePciConfig32(Adapter, B57XX_REG_REG_BASE, Address);
+    Value = B57XXReadPciConfig32(Adapter, B57XX_REG_REG_DATA);
+    Value |= Mask;
+    B57XXWritePciConfig32(Adapter, B57XX_REG_REG_DATA, Value);
 }
 
 FORCEINLINE
 VOID
-B57XXDisableRegister(
+B57XXDisableRegInd(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
-    _Inout_ PULONG pValue,
     _In_ ULONG Mask)
 {
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_REG_BASE, Address);
-    B57XXReadPciConfigULong(Adapter, B57XX_REG_REG_DATA, pValue);
-    *pValue &= ~Mask;
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_REG_DATA, *pValue);
+    ULONG Value;
+
+    B57XXWritePciConfig32(Adapter, B57XX_REG_REG_BASE, Address);
+    Value = B57XXReadPciConfig32(Adapter, B57XX_REG_REG_DATA);
+    Value &= ~Mask;
+    B57XXWritePciConfig32(Adapter, B57XX_REG_REG_DATA, Value);
 }
 
 FORCEINLINE
@@ -439,29 +445,28 @@ B57XXWriteMailbox(
     _In_ ULONG Address,
     _In_ ULONG Value)
 {
-    B57XXWriteULong(Adapter, Address + 4, Value);
+    B57XXWriteReg(Adapter, Address + 4, Value);
 }
 
 FORCEINLINE
-VOID
-B57XXReadMemoryULong(
+ULONG
+B57XXReadMemInd(
     _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG Address,
-    _Out_ PULONG pValue)
+    _In_ ULONG Address)
 {
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_MEM_BASE, Address);
-    B57XXReadPciConfigULong(Adapter, B57XX_REG_MEM_DATA, pValue);
+    B57XXWritePciConfig32(Adapter, B57XX_REG_MEM_BASE, Address);
+    return B57XXReadPciConfig32(Adapter, B57XX_REG_MEM_DATA);
 }
 
 FORCEINLINE
 VOID
-B57XXWriteMemoryULong(
+B57XXWriteMemInd(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
     _In_ ULONG Value)
 {
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_MEM_BASE, Address);
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_MEM_DATA, Value);
+    B57XXWritePciConfig32(Adapter, B57XX_REG_MEM_BASE, Address);
+    B57XXWritePciConfig32(Adapter, B57XX_REG_MEM_DATA, Value);
 }
 
 FORCEINLINE

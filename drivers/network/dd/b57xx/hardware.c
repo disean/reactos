@@ -134,7 +134,7 @@ NICPowerOn(
     Adapter->HardwareStatus = NdisHardwareStatusNotReady;
 
     /* Initialization Procedure step 2: Disable interrupts */
-    B57XXEnableULong(Adapter, B57XX_REG_MISC_HOST_CTRL, &Value, B57XX_MISC_HOST_CTRL_CINTA);
+    B57XXEnableReg(Adapter, B57XX_REG_MISC_HOST_CTRL, B57XX_MISC_HOST_CTRL_CINTA);
     NICDisableInterrupts(Adapter);
 
     /* Initialization Procedure step 3 should be done already (Save select PCI registers) */
@@ -142,11 +142,11 @@ NICPowerOn(
     /* Initialization Procedure step 4: Acquire the NVRAM lock */
     if (!NICISDEVICE(Adapter, B5700, B5701))
     {
-        B57XXEnableULong(Adapter, B57XX_REG_SOFT_ARB, &Value, B57XX_SOFT_ARB_REQSET1);
+        B57XXEnableReg(Adapter, B57XX_REG_SOFT_ARB, B57XX_SOFT_ARB_REQSET1);
         for (n = 0; n < MAX_ATTEMPTS; n++)
         {
             NdisStallExecution(1);
-            B57XXReadULong(Adapter, B57XX_REG_SOFT_ARB, &Value);
+            Value = B57XXReadReg(Adapter, B57XX_REG_SOFT_ARB);
             if (Value & B57XX_SOFT_ARB_ARBWON1)
             {
                 break;
@@ -160,27 +160,25 @@ NICPowerOn(
     }
 
     /* Initialization Procedure step 5: Prepare the chip for writing T3_MAGIC_NUMBER */
-    B57XXEnableULong(Adapter, B57XX_REG_MEM_ARB_MODE, &Value, B57XX_MEM_ARB_MODE_ENABLE);
+    B57XXEnableReg(Adapter, B57XX_REG_MEM_ARB_MODE, B57XX_MEM_ARB_MODE_ENABLE);
 
-    B57XXEnableULong(Adapter,
-                     B57XX_REG_MISC_HOST_CTRL,
-                     &Value,
-                     B57XX_MISC_HOST_CTRL_INDIRECTACCESS |
-                     B57XX_MISC_HOST_CTRL_CLOCKCTRL |
-                     B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP,
-                                       B57XX_MISC_HOST_CTRL_ENDIANBYTESWAP,
-                                       B57XX_ENDIAN_WORDSWAP,
-                                       B57XX_MISC_HOST_CTRL_ENDIANWORDSWAP));
-    B57XXEnableULong(Adapter,
-                     B57XX_REG_MODE_CTRL,
-                     &Value,
-                     B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP_NFDATA,
-                                       B57XX_MODE_CTRL_BYTESWAPNF,
-                                       B57XX_ENDIAN_WORDSWAP_NFDATA,
-                                       B57XX_MODE_CTRL_WORDSWAPNF));
+    B57XXEnableReg(Adapter,
+                   B57XX_REG_MISC_HOST_CTRL,
+                   B57XX_MISC_HOST_CTRL_INDIRECTACCESS |
+                   B57XX_MISC_HOST_CTRL_CLOCKCTRL |
+                   B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP,
+                                     B57XX_MISC_HOST_CTRL_ENDIANBYTESWAP,
+                                     B57XX_ENDIAN_WORDSWAP,
+                                     B57XX_MISC_HOST_CTRL_ENDIANWORDSWAP));
+    B57XXEnableReg(Adapter,
+                   B57XX_REG_MODE_CTRL,
+                   B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP_NFDATA,
+                                     B57XX_MODE_CTRL_BYTESWAPNF,
+                                     B57XX_ENDIAN_WORDSWAP_NFDATA,
+                                     B57XX_MODE_CTRL_WORDSWAPNF));
 
     /* Initialization Procedure steps 6+ */
-    B57XXWriteMemoryULong(Adapter, B57XX_ADDR_FW_DRV_STATE_MAILBOX, B57XX_CONST_DRV_STATE_START);
+    B57XXWriteMemInd(Adapter, B57XX_ADDR_FW_DRV_STATE_MAILBOX, B57XX_CONST_DRV_STATE_START);
 
     Status = NICSoftReset(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
@@ -204,23 +202,22 @@ NICSoftReset(
     Adapter->HardwareStatus = NdisHardwareStatusReset;
 
     /* Initialization Procedure step 6: Prepare firmware for reset */
-    B57XXWriteMemoryULong(Adapter, B57XX_ADDR_FW_MAILBOX, B57XX_CONST_T3_MAGIC_NUMBER);
+    B57XXWriteMemInd(Adapter, B57XX_ADDR_FW_MAILBOX, B57XX_CONST_T3_MAGIC_NUMBER);
 
     if (NICISDEVICE(Adapter, B5752))
     {
-        B57XXWriteULong(Adapter, B57XX_REG_FASTBOOT_COUNTER, 0);
+        B57XXWriteReg(Adapter, B57XX_REG_FASTBOOT_COUNTER, 0);
     }
 
     /* Initialization Procedure step 7: Reset the core clocks */
     if (NICISDEVICE(Adapter, B5751, B5751M, B5721, B5752, B5752M))
     {
-        B57XXEnableULong(Adapter,
-                         B57XX_REG_PCI_CLOCK,
-                         &Value,
-                         B57XX_PCI_CLOCK_ALTCLOCKFINAL | B57XX_PCI_CLOCK_ALTCLOCK);
+        B57XXEnableReg(Adapter,
+                       B57XX_REG_PCI_CLOCK,
+                       B57XX_PCI_CLOCK_ALTCLOCKFINAL | B57XX_PCI_CLOCK_ALTCLOCK);
     }
 
-    B57XXReadULong(Adapter, B57XX_REG_MISC_CONFIG, &Value);
+    Value = B57XXReadReg(Adapter, B57XX_REG_MISC_CONFIG);
     Value |= B57XX_MISC_CONFIG_CLCKRESET;
     if (Adapter->B5705Plus)
     {
@@ -230,13 +227,13 @@ NICSoftReset(
     {
         Value |= B57XX_MISC_CONFIG_DGRPCIEB;
     }
-    B57XXWriteULong(Adapter, B57XX_REG_MISC_CONFIG, Value);
+    B57XXWriteReg(Adapter, B57XX_REG_MISC_CONFIG, Value);
 
     /* Initialization Procedure step 8: Wait for core-clock reset to complete. */
     /* We can't poll the core-clock reset bit to de-assert,
        since the local memory interface is disabled by the reset. */
     NdisStallExecution(90000);
-    B57XXReadPciConfigULong(Adapter, B57XX_REG_COMMAND, &Value);
+    B57XXReadPciConfig32(Adapter, B57XX_REG_COMMAND);
     NdisStallExecution(10000);
 
     /* Initialization Procedure step 9: Disable interrupts */
@@ -248,7 +245,7 @@ NICSoftReset(
     NdisWriteRegisterUshort((PUSHORT)(Adapter->IoBase + B57XX_REG_PCIX_COMMAND), Value);
 
     /* Initialization Procedure step 12: Enable the MAC memory arbiter */
-    B57XXEnableULong(Adapter, B57XX_REG_MEM_ARB_MODE, &Value, B57XX_MEM_ARB_MODE_ENABLE);
+    B57XXEnableReg(Adapter, B57XX_REG_MEM_ARB_MODE, B57XX_MEM_ARB_MODE_ENABLE);
 
     /* Initialization Procedure step 13: Enable External Memory */
     if (NICISDEVICE(Adapter, B5700))
@@ -258,34 +255,32 @@ NICSoftReset(
     }
 
     /* Initialization Procedure step 14: Initialize the Miscellaneous Host Control register */
-    B57XXEnableULong(Adapter,
-                     B57XX_REG_MISC_HOST_CTRL,
-                     &Value,
-                     B57XX_MISC_HOST_CTRL_INDIRECTACCESS |
-                     B57XX_MISC_HOST_CTRL_PCISTATE |
-                     B57XX_MISC_HOST_CTRL_CLOCKCTRL |
-                     B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP,
-                                       B57XX_MISC_HOST_CTRL_ENDIANBYTESWAP,
-                                       B57XX_ENDIAN_WORDSWAP,
-                                       B57XX_MISC_HOST_CTRL_ENDIANWORDSWAP));
+    B57XXEnableReg(Adapter,
+                   B57XX_REG_MISC_HOST_CTRL,
+                   B57XX_MISC_HOST_CTRL_INDIRECTACCESS |
+                   B57XX_MISC_HOST_CTRL_PCISTATE |
+                   B57XX_MISC_HOST_CTRL_CLOCKCTRL |
+                   B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP,
+                                     B57XX_MISC_HOST_CTRL_ENDIANBYTESWAP,
+                                     B57XX_ENDIAN_WORDSWAP,
+                                     B57XX_MISC_HOST_CTRL_ENDIANWORDSWAP));
 
     /* Initialization Procedure step 15-16: Initialize the General Mode Control register */
-    B57XXEnableULong(Adapter,
-                     B57XX_REG_MODE_CTRL,
-                     &Value,
-                     B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP_DATA,
-                                       B57XX_MODE_CTRL_BYTESWAPDATA,
-                                       B57XX_ENDIAN_WORDSWAP_DATA,
-                                       B57XX_MODE_CTRL_WORDSWAPDATA) |
-                     B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP_NFDATA,
-                                       B57XX_MODE_CTRL_BYTESWAPNF,
-                                       B57XX_ENDIAN_WORDSWAP_NFDATA,
-                                       B57XX_MODE_CTRL_WORDSWAPNF));
+    B57XXEnableReg(Adapter,
+                   B57XX_REG_MODE_CTRL,
+                   B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP_DATA,
+                                     B57XX_MODE_CTRL_BYTESWAPDATA,
+                                     B57XX_ENDIAN_WORDSWAP_DATA,
+                                     B57XX_MODE_CTRL_WORDSWAPDATA) |
+                   B57XX_ENDIAN_SWAP(B57XX_ENDIAN_BYTESWAP_NFDATA,
+                                     B57XX_MODE_CTRL_BYTESWAPNF,
+                                     B57XX_ENDIAN_WORDSWAP_NFDATA,
+                                     B57XX_MODE_CTRL_WORDSWAPNF));
 
     /* Initialization Procedure step 17: Poll for bootcode completion */
     for (n = 0; n < MAX_ATTEMPTS; n++)
     {
-        B57XXReadMemoryULong(Adapter, B57XX_ADDR_FW_MAILBOX, &Value);
+        Value = B57XXReadMemInd(Adapter, B57XX_ADDR_FW_MAILBOX);
         if (Value == ~B57XX_CONST_T3_MAGIC_NUMBER)
         {
             break;
@@ -303,36 +298,31 @@ NICSoftReset(
     /* Initialization Procedure step 18: Initialize the Ethernet MAC Mode register */
     if (Adapter->IsSerDes)
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_MODE, B57XX_ETH_MAC_MODE_PORT_TBI);
+        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_MODE, B57XX_ETH_MAC_MODE_PORT_TBI);
     }
     else
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_MODE, B57XX_ETH_MAC_MODE_PORT_GMI);
+        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_MODE, B57XX_ETH_MAC_MODE_PORT_GMI);
     }
 
     /* Initialization Procedure step 19-20: Enable the PCIe bug fix & Enable data FIFO protection */
     if (Adapter->B5721Plus)
     {
-        B57XXEnableRegister(Adapter,
-                            B57XX_REG_TLP_CTRL,
-                            &Value,
-                            B57XX_TLP_CTRL_FIFOPROTECT | B57XX_TLP_CTRL_INTMODEFIX);
+        B57XXEnableRegInd(Adapter,
+                          B57XX_REG_TLP_CTRL,
+                          B57XX_TLP_CTRL_FIFOPROTECT | B57XX_TLP_CTRL_INTMODEFIX);
     }
 
     /* Initialization Procedure step 21: Enable the hardware fixes */
     if (Adapter->B5705Plus)
     {
-        B57XXEnableRegister(Adapter,
-                            B57XX_REG_HW_FIX,
-                            &Value,
-                            B57XX_HW_FIX_HWFIX1 | B57XX_HW_FIX_HWFIX3 | B57XX_HW_FIX_HWFIX4);
+        B57XXEnableRegInd(Adapter,
+                          B57XX_REG_HW_FIX,
+                          B57XX_HW_FIX_HWFIX1 | B57XX_HW_FIX_HWFIX3 | B57XX_HW_FIX_HWFIX4);
     }
 
     /* Initialization Procedure step 22: Enable Tagged Status Mode */
-    B57XXEnableRegister(Adapter,
-                       B57XX_REG_MISC_HOST_CTRL,
-                       &Value,
-                       B57XX_MISC_HOST_CTRL_TAGGEDSTATUS);
+    B57XXEnableRegInd(Adapter, B57XX_REG_MISC_HOST_CTRL, B57XX_MISC_HOST_CTRL_TAGGEDSTATUS);
 
     /* Initialization Procedure step 23: Restore select PCI registers */
     NdisWriteRegisterUchar((PUCHAR)(Adapter->IoBase + B57XX_REG_CACHE_LINE_SIZE),
@@ -345,7 +335,7 @@ NICSoftReset(
     /* Initialization Procedure steps 26: Clear the MAC/driver status (done earlier) */
 
     /* Initialization Procedure step 27: Set the default PCI Command Encoding R/W Transactions */
-    B57XXReadRegister(Adapter, B57XX_REG_PCI_STATE, &Value);
+    Value = B57XXReadRegInd(Adapter, B57XX_REG_PCI_STATE);
     if (NICISDEVICE(Adapter, B5700, B5701))
     {
         Value = (Value & B57XX_PCI_STATE_BUSMODE) ? 0x761B000F : 0x763F000F;
@@ -375,84 +365,79 @@ NICSoftReset(
         NdisReadRegisterUshort((PUSHORT)(Adapter->IoBase + B57XX_REG_DEVICE_CTRL), &Value);
         Value = (Value & (0b111 << 5)) ? 0x76380000 : 0x76180000;
     }
-    B57XXWriteRegister(Adapter, B57XX_REG_DMA_CTRL, Value);
+    B57XXWriteRegInd(Adapter, B57XX_REG_DMA_CTRL, Value);
 
     /* Initialization Procedure step 28 done in step 15-16 (Set DMA byte swapping) */
 
     /* Initialization Procedure step 29-31: Host-based send rings, Ready RX traffic, Checksums */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_MODE_CTRL,
-                        &Value,
-                        B57XX_MODE_CTRL_INTMACATTN |
-                        B57XX_MODE_CTRL_HOSTSENDBDS |
-                        B57XX_MODE_CTRL_HOSTSTACKUP |
-                        B57XX_MODE_CTRL_NOTXPSHCS);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_MODE_CTRL,
+                      B57XX_MODE_CTRL_INTMACATTN |
+                      B57XX_MODE_CTRL_HOSTSENDBDS |
+                      B57XX_MODE_CTRL_HOSTSTACKUP |
+                      B57XX_MODE_CTRL_NOTXPSHCS);
 
     /* Initialization Procedure step 32: Configure timer */
-    B57XXReadRegister(Adapter, B57XX_REG_MISC_CONFIG, &Value);
+    Value = B57XXReadRegInd(Adapter, B57XX_REG_MISC_CONFIG);
     Value &= ~(0x7F << 1);
     Value |= (65 << 1); // Increment every 1 uS
-    B57XXWriteRegister(Adapter, B57XX_REG_MISC_CONFIG, Value);
+    B57XXWriteRegInd(Adapter, B57XX_REG_MISC_CONFIG, Value);
 
     /* Initialization Procedure step 33: MAC local memory pool */
     if (NICISDEVICE(Adapter, B5700))
     {
-        B57XXEnableRegister(Adapter,
-                            B57XX_REG_MISC_LOCAL_CTRL,
-                            &Value,
-                            B57XX_MISC_LOCAL_CTRL_EXTMEM);
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x20000);
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0); // FIXME for B5700
+        B57XXEnableRegInd(Adapter, B57XX_REG_MISC_LOCAL_CTRL, B57XX_MISC_LOCAL_CTRL_EXTMEM);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x20000);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0); // FIXME for B5700
     }
     if (NICISDEVICE(Adapter, B5701, B5702, B5703C, B5703S))
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x8000);
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0x18000);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x8000);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0x18000);
     }
     else if (NICISDEVICE(Adapter, B5704C, B5704S))
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x10000);
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0x10000);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x10000);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0x10000);
     }
 
     /* Initialization Procedure step 34: MAC DMA resource pool */
     if (!Adapter->B5705Plus)
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_DMA_DESC_POOL_BASE, 0x2000);
-        B57XXWriteRegister(Adapter, B57XX_REG_DMA_DESC_POOL_LENGTH, 0x2000);
+        B57XXWriteRegInd(Adapter, B57XX_REG_DMA_DESC_POOL_BASE, 0x2000);
+        B57XXWriteRegInd(Adapter, B57XX_REG_DMA_DESC_POOL_LENGTH, 0x2000);
     }
 
     /* Initialization Procedure step 35: MAC memory pool watermarks (Standard frames) */
     if (!Adapter->B5705Plus)
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_DMA_LO_WM, 0x50);
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_RX_LO_WM, 0x20);
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_HI_WM, 0x60);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_DMA_LO_WM, 0x50);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_RX_LO_WM, 0x20);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_HI_WM, 0x60);
     }
     else
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_DMA_LO_WM, 0x00);
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_RX_LO_WM, 0x10);
-        B57XXWriteRegister(Adapter, B57XX_REG_MBUF_POOL_HI_WM, 0x60);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_DMA_LO_WM, 0x00);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_RX_LO_WM, 0x10);
+        B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_HI_WM, 0x60);
     }
 
     /* Initialization Procedure step 36: MAC DMA pool watermarks */
-    B57XXWriteRegister(Adapter, B57XX_REG_DMA_DESC_POOL_LO_WM, 5);
-    B57XXWriteRegister(Adapter, B57XX_REG_DMA_DESC_POOL_HI_WM, 10);
+    B57XXWriteRegInd(Adapter, B57XX_REG_DMA_DESC_POOL_LO_WM, 5);
+    B57XXWriteRegInd(Adapter, B57XX_REG_DMA_DESC_POOL_HI_WM, 10);
 
     /* Initialization Procedure step 37: Configure flow control behavior */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_RX_LOW_WM_MAX, 2);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_RX_LOW_WM_MAX, 2);
 
     /* Initialization Procedure step 38-39: Enable the buffer manager */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_BUF_MAN_MODE,
-                        &Value,
-                        B57XX_BUF_MAN_MODE_ENABLE | B57XX_BUF_MAN_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_BUF_MAN_MODE,
+                      B57XX_BUF_MAN_MODE_ENABLE | B57XX_BUF_MAN_MODE_ATTN);
 
     for (n = 0; n < MAX_ATTEMPTS; n++)
     {
         NdisStallExecution(10);
-        B57XXReadRegister(Adapter, B57XX_REG_BUF_MAN_MODE, &Value);
+        Value = B57XXReadRegInd(Adapter, B57XX_REG_BUF_MAN_MODE);
         if (Value & B57XX_BUF_MAN_MODE_ENABLE)
         {
             break;
@@ -465,8 +450,8 @@ NICSoftReset(
     }
 
     /* Initialization Procedure step 40: Enable internal hardware queues */
-    B57XXWriteRegister(Adapter, B57XX_REG_FTQ_RESET, 0xFFFFFFFF);
-    B57XXWriteRegister(Adapter, B57XX_REG_FTQ_RESET, 0x00000000);
+    B57XXWriteRegInd(Adapter, B57XX_REG_FTQ_RESET, 0xFFFFFFFF);
+    B57XXWriteRegInd(Adapter, B57XX_REG_FTQ_RESET, 0x00000000);
 
     /* Initialization Procedure step 41: Standard Receive Buffer Ring (Internal memory) */
     Adapter->StandardProducer.RingControlBlock.MaxLength = !Adapter->B5705Plus ?
@@ -474,18 +459,18 @@ NICSoftReset(
                                                            Adapter->StandardProducer.Count;
     Adapter->StandardProducer.RingControlBlock.NICRingAddress = B57XX_ADDR_RECEIVE_STD_RINGS;
 
-    B57XXWriteRegister(Adapter,
-                       B57XX_REG_STD_RXP_RING_HOST_HI,
-                       Adapter->StandardProducer.RingControlBlock.HostRingAddress.HighPart);
-    B57XXWriteRegister(Adapter,
-                       B57XX_REG_STD_RXP_RING_HOST_LO,
-                       Adapter->StandardProducer.RingControlBlock.HostRingAddress.LowPart);
-    B57XXWriteRegister(Adapter,
-                       B57XX_REG_STD_RXP_RING_ATTR,
-                       Adapter->StandardProducer.RingControlBlock.MaxLength << 16);
-    B57XXWriteRegister(Adapter,
-                       B57XX_REG_STD_RXP_RING_NIC,
-                       Adapter->StandardProducer.RingControlBlock.NICRingAddress);
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_STD_RXP_RING_HOST_HI,
+                     Adapter->StandardProducer.RingControlBlock.HostRingAddress.HighPart);
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_STD_RXP_RING_HOST_LO,
+                     Adapter->StandardProducer.RingControlBlock.HostRingAddress.LowPart);
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_STD_RXP_RING_ATTR,
+                     Adapter->StandardProducer.RingControlBlock.MaxLength << 16);
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_STD_RXP_RING_NIC,
+                     Adapter->StandardProducer.RingControlBlock.NICRingAddress);
     B57XXWriteMailbox(Adapter, B57XX_MBOX_STD_RXP_RING_INDEX, 0);
 
     /* Initialization Procedure step 42: Jumbo Receive Buffer Ring (disable) */
@@ -494,12 +479,12 @@ NICSoftReset(
         Adapter->JumboProducer.RingControlBlock.Flags = B57XX_RCB_FLAG_RING_DISABLED;
         Adapter->JumboProducer.RingControlBlock.NICRingAddress = B57XX_ADDR_RECEIVE_JUMBO_RINGS;
 
-        B57XXWriteRegister(Adapter,
-                           B57XX_REG_JUMB_RXP_RING_ATTR,
-                           Adapter->JumboProducer.RingControlBlock.Flags);
-        B57XXWriteRegister(Adapter,
-                           B57XX_REG_JUMB_RXP_RING_NIC,
-                           Adapter->JumboProducer.RingControlBlock.NICRingAddress);
+        B57XXWriteRegInd(Adapter,
+                         B57XX_REG_JUMB_RXP_RING_ATTR,
+                         Adapter->JumboProducer.RingControlBlock.Flags);
+        B57XXWriteRegInd(Adapter,
+                         B57XX_REG_JUMB_RXP_RING_NIC,
+                         Adapter->JumboProducer.RingControlBlock.NICRingAddress);
         B57XXWriteMailbox(Adapter, B57XX_MBOX_JUMBO_RXP_RING_INDEX, 0);
     }
 
@@ -509,17 +494,17 @@ NICSoftReset(
         Adapter->MiniProducer.RingControlBlock.Flags = B57XX_RCB_FLAG_RING_DISABLED;
         Adapter->MiniProducer.RingControlBlock.NICRingAddress = B57XX_ADDR_RECEIVE_MINI_RINGS;
 
-        B57XXWriteRegister(Adapter,
-                           B57XX_REG_MINI_RXP_RING_ATTR,
-                           Adapter->MiniProducer.RingControlBlock.Flags);
-        B57XXWriteRegister(Adapter,
-                           B57XX_REG_MINI_RXP_RING_NIC,
-                           Adapter->MiniProducer.RingControlBlock.NICRingAddress);
+        B57XXWriteRegInd(Adapter,
+                         B57XX_REG_MINI_RXP_RING_ATTR,
+                         Adapter->MiniProducer.RingControlBlock.Flags);
+        B57XXWriteRegInd(Adapter,
+                         B57XX_REG_MINI_RXP_RING_NIC,
+                         Adapter->MiniProducer.RingControlBlock.NICRingAddress);
         B57XXWriteMailbox(Adapter, B57XX_MBOX_MINI_RXP_RING_INDEX, 0);
     }
 
     /* Initialization Procedure step 44: Set the BD Ring replenish thresholds for RX Rings */
-    B57XXWriteRegister(Adapter, B57XX_REG_STD_RX_RING_REPL, 25);
+    B57XXWriteRegInd(Adapter, B57XX_REG_STD_RX_RING_REPL, 25);
 
     /* Initialization Procedure step 45-47: Initialize send rings & Disable unused send rings */
     Adapter->SendProducer[0].RingControlBlock.MaxLength = Adapter->SendProducer[0].Count;
@@ -575,47 +560,45 @@ NICSoftReset(
              Adapter->MACAddresses[0][3] +
              Adapter->MACAddresses[0][4] +
              Adapter->MACAddresses[0][5]) & 0x3FF;
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_TX_RND_BACKOFF, Value);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_TX_RND_BACKOFF, Value);
 
     /* Initialization Procedure step 54: Configure the Message Transfer Unit MTU size */
     // We need to include VLAN tag (4 bytes) & frame check sequence (4 bytes) for the MTU
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_RX_MTU_SIZE, Adapter->MaxFrameSize + 8);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_RX_MTU_SIZE, Adapter->MaxFrameSize + 8);
 
     /* Initialization Procedure step 55: Configure IPG for transmit */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_TX_LENGTH, 0x2620);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_TX_LENGTH, 0x2620);
 
     /* Initialization Procedure step 56: Configure default RX return ring for non-matched packets */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_RX_RULES_CONFIG, (1 << 3));
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_RX_RULES_CONFIG, (1 << 3));
 
     /* Initialization Procedure step 57: Configure the number of Receive Lists */
-    B57XXWriteRegister(Adapter, B57XX_REG_RX_LIST_PLACE_CONFIG, 0x181);
+    B57XXWriteRegInd(Adapter, B57XX_REG_RX_LIST_PLACE_CONFIG, 0x181);
 
     /* Initialization Procedure step 58: Receive List Placement Statistics mask */
-    B57XXWriteRegister(Adapter, B57XX_REG_RX_LIST_STAT_MASK, 0xFFFFFF);
+    B57XXWriteRegInd(Adapter, B57XX_REG_RX_LIST_STAT_MASK, 0xFFFFFF);
 
     /* Initialization Procedure step 59: Enable RX statistics */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_RX_LIST_STAT_CTRL,
-                        &Value,
-                        B57XX_STAT_CTRL_ENABLE);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_RX_LIST_STAT_CTRL,
+                      B57XX_STAT_CTRL_ENABLE);
 
     /* Initialization Procedure step 60: Enable the Send Data Initiator mask */
-    B57XXWriteRegister(Adapter, B57XX_REG_TX_DATA_STAT_MASK, 0xFFFFFF);
+    B57XXWriteRegInd(Adapter, B57XX_REG_TX_DATA_STAT_MASK, 0xFFFFFF);
 
     /* Initialization Procedure step 61: Enable TX statistics */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_TX_DATA_STAT_CTRL,
-                        &Value,
-                        B57XX_STAT_CTRL_ENABLE | B57XX_STAT_CTRL_FASTSTAT);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_TX_DATA_STAT_CTRL,
+                      B57XX_STAT_CTRL_ENABLE | B57XX_STAT_CTRL_FASTSTAT);
 
     /* Initialization Procedure step 62: Disable the host coalescing eng */
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_HOST_MODE, 0x0000);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_HOST_MODE, 0x0000);
 
     /* Initialization Procedure step 63: Poll 20 ms for the host coalescing engine to stop */
     for (n = 0; n < MAX_ATTEMPTS; n++)
     {
         NdisStallExecution(20);
-        B57XXReadRegister(Adapter, B57XX_REG_COAL_HOST_MODE, &Value);
+        Value = B57XXReadRegInd(Adapter, B57XX_REG_COAL_HOST_MODE);
         if (Value == 0x0000)
         {
             break;
@@ -628,84 +611,79 @@ NICSoftReset(
     }
 
     /* Initialization Procedure step 64: Configure the host coalescing tick count */
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_RX_TICKS, 300);
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_TX_TICKS, 150);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_RX_TICKS, 300);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_TX_TICKS, 150);
 
     /* Initialization Procedure step 65: Configure the host coalescing BD count */
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_RX_MAX_BD, 20);
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_TX_MAX_BD, 10);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_RX_MAX_BD, 20);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_TX_MAX_BD, 10);
 
     /* Initialization Procedure step 66: Configure during interrupt tick counter */
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_RX_INT_TICKS, 0);
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_TX_INT_TICKS, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_RX_INT_TICKS, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_TX_INT_TICKS, 0);
 
     /* Initialization Procedure step 67: Configure the max-coalesced frames during int. counter */
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_RX_MAX_INT_BD, 0);
-    B57XXWriteRegister(Adapter, B57XX_REG_COAL_TX_MAX_INT_BD, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_RX_MAX_INT_BD, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_COAL_TX_MAX_INT_BD, 0);
 
     /* Initialization Procedure step 68: Initialize host status block address */
-    B57XXWriteRegister(Adapter,
-                       B57XX_REG_STATUS_BLCK_HOST_ADDR,
-                       Adapter->Status.HostAddress.HighPart);
-    B57XXWriteRegister(Adapter,
-                       B57XX_REG_STATUS_BLCK_HOST_ADDR + 4,
-                       Adapter->Status.HostAddress.LowPart);
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_STATUS_BLCK_HOST_ADDR,
+                     Adapter->Status.HostAddress.HighPart);
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_STATUS_BLCK_HOST_ADDR + 4,
+                     Adapter->Status.HostAddress.LowPart);
 
     /* Initialization Procedure step 69-71: Initialize statistics block */
     if (!Adapter->B5705Plus)
     {
-        B57XXWriteRegister(Adapter,
-                           B57XX_REG_STAT_HOST_ADDR,
-                           Adapter->Statistics.HostAddress.HighPart);
-        B57XXWriteRegister(Adapter,
-                           B57XX_REG_STAT_HOST_ADDR + 4,
-                           Adapter->Statistics.HostAddress.LowPart);
-        B57XXWriteRegister(Adapter, B57XX_REG_STAT_TICKS, 1000000);
-        B57XXWriteRegister(Adapter, B57XX_REG_STAT_BASE_ADDR, B57XX_ADDR_STAT_BLCK);
+        B57XXWriteRegInd(Adapter,
+                         B57XX_REG_STAT_HOST_ADDR,
+                         Adapter->Statistics.HostAddress.HighPart);
+        B57XXWriteRegInd(Adapter,
+                         B57XX_REG_STAT_HOST_ADDR + 4,
+                         Adapter->Statistics.HostAddress.LowPart);
+        B57XXWriteRegInd(Adapter, B57XX_REG_STAT_TICKS, 1000000);
+        B57XXWriteRegInd(Adapter, B57XX_REG_STAT_BASE_ADDR, B57XX_ADDR_STAT_BLCK);
     }
 
     /* Initialization Procedure step 72: Configure the status block address in NIC local memory */
     if (!Adapter->B5705Plus)
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_STATUS_BLCK_BASE_ADDR, B57XX_ADDR_STATUS_BLCK);
+        B57XXWriteRegInd(Adapter, B57XX_REG_STATUS_BLCK_BASE_ADDR, B57XX_ADDR_STATUS_BLCK);
     }
 
     /* Initialization Procedure step 73: Enable the host coalescing engine */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_COAL_HOST_MODE,
-                        &Value,
-                        B57XX_COAL_HOST_MODE_ENABLE |
-                        B57XX_COAL_HOST_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_COAL_HOST_MODE,
+                      B57XX_COAL_HOST_MODE_ENABLE |
+                      B57XX_COAL_HOST_MODE_ATTN);
 
     /* Initialization Procedure step 74: Enable the receive BD completion functional block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_RX_BD_COMPL_MODE,
-                        &Value,
-                        B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_RX_BD_COMPL_MODE,
+                      B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
 
     /* Initialization Procedure step 75: Enable the receive list placement functional block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_RX_LIST_PLACE_MODE,
-                        &Value,
-                        B57XX_RX_LIST_PLACE_MODE_ENABLE);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_RX_LIST_PLACE_MODE,
+                      B57XX_RX_LIST_PLACE_MODE_ENABLE);
 
     /* Initialization Procedure step 76: Enable the receive list selector functional block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_RX_LIST_SELECT_MODE,
-                        &Value,
-                        B57XX_RX_LIST_SELECT_MODE_ENABLE | B57XX_RX_LIST_SELECT_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_RX_LIST_SELECT_MODE,
+                      B57XX_RX_LIST_SELECT_MODE_ENABLE | B57XX_RX_LIST_SELECT_MODE_ATTN);
 
     /* Initialization Procedure step 77-78: Enable DMA engines & Enable and clear statistics */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_ETH_MAC_MODE,
-                        &Value,
-                        B57XX_ETH_MAC_MODE_TXDMA |
-                        B57XX_ETH_MAC_MODE_RXDMA |
-                        B57XX_ETH_MAC_MODE_RXFHDDMA |
-                        B57XX_ETH_MAC_MODE_RXSTATCLEAR |
-                        B57XX_ETH_MAC_MODE_RXSTATENABLE |
-                        B57XX_ETH_MAC_MODE_TXSTATCLEAR |
-                        B57XX_ETH_MAC_MODE_TXSTATENABLE);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_ETH_MAC_MODE,
+                      B57XX_ETH_MAC_MODE_TXDMA |
+                      B57XX_ETH_MAC_MODE_RXDMA |
+                      B57XX_ETH_MAC_MODE_RXFHDDMA |
+                      B57XX_ETH_MAC_MODE_RXSTATCLEAR |
+                      B57XX_ETH_MAC_MODE_RXSTATENABLE |
+                      B57XX_ETH_MAC_MODE_TXSTATCLEAR |
+                      B57XX_ETH_MAC_MODE_TXSTATENABLE);
     NdisStallExecution(40);
 
     /* Initialization Procedure step 79: Configure General Miscellaneous Local Control */
@@ -714,7 +692,7 @@ NICSoftReset(
     {
         Value |= B57XX_MISC_LOCAL_CTRL_GPIOO3;
     }
-    B57XXWriteRegister(Adapter, B57XX_REG_MISC_LOCAL_CTRL, Value);
+    B57XXWriteRegInd(Adapter, B57XX_REG_MISC_LOCAL_CTRL, Value);
     NdisStallExecution(100);
 
     /* Initialization Procedure step 80: Write a value of zero to the Interrupt Mailbox 0 */
@@ -723,111 +701,100 @@ NICSoftReset(
     /* Initialization Procedure step 81: Enable DMA completion functional block */
     if (!Adapter->B5705Plus)
     {
-        B57XXEnableRegister(Adapter, B57XX_REG_DMA_COMPLETION, &Value, B57XX_DMA_COMPLETION_ENABLE);
+        B57XXEnableRegInd(Adapter, B57XX_REG_DMA_COMPLETION, B57XX_DMA_COMPLETION_ENABLE);
     }
 
     /* Initialization Procedure step 82: Configure the Write DMA Mode register */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_DMA_WRITE_MODE,
-                        &Value,
-                        B57XX_DMA_MODE_ENABLE |
-                        B57XX_DMA_MODE_TARGETABORT |
-                        B57XX_DMA_MODE_MASTERABORT |
-                        B57XX_DMA_MODE_PARITYERROR |
-                        B57XX_DMA_MODE_HOSTADDROF |
-                        B57XX_DMA_MODE_FIFOOR |
-                        B57XX_DMA_MODE_FIFOUR |
-                        B57XX_DMA_MODE_FIFOOVER |
-                        B57XX_DMA_MODE_OVERLENGTH |
-                        B57XX_DMA_MODE_STATUSTAGFIX);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_DMA_WRITE_MODE,
+                      B57XX_DMA_MODE_ENABLE |
+                      B57XX_DMA_MODE_TARGETABORT |
+                      B57XX_DMA_MODE_MASTERABORT |
+                      B57XX_DMA_MODE_PARITYERROR |
+                      B57XX_DMA_MODE_HOSTADDROF |
+                      B57XX_DMA_MODE_FIFOOR |
+                      B57XX_DMA_MODE_FIFOUR |
+                      B57XX_DMA_MODE_FIFOOVER |
+                      B57XX_DMA_MODE_OVERLENGTH |
+                      B57XX_DMA_MODE_STATUSTAGFIX);
     NdisStallExecution(40);
 
     /* Initialization Procedure step 83: Configure the Read DMA Mode register */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_DMA_READ_MODE,
-                        &Value,
-                        B57XX_DMA_MODE_ENABLE |
-                        B57XX_DMA_MODE_TARGETABORT |
-                        B57XX_DMA_MODE_MASTERABORT |
-                        B57XX_DMA_MODE_PARITYERROR |
-                        B57XX_DMA_MODE_HOSTADDROF |
-                        B57XX_DMA_MODE_FIFOOR |
-                        B57XX_DMA_MODE_FIFOUR |
-                        B57XX_DMA_MODE_FIFOOVER |
-                        B57XX_DMA_MODE_OVERLENGTH);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_DMA_READ_MODE,
+                      B57XX_DMA_MODE_ENABLE |
+                      B57XX_DMA_MODE_TARGETABORT |
+                      B57XX_DMA_MODE_MASTERABORT |
+                      B57XX_DMA_MODE_PARITYERROR |
+                      B57XX_DMA_MODE_HOSTADDROF |
+                      B57XX_DMA_MODE_FIFOOR |
+                      B57XX_DMA_MODE_FIFOUR |
+                      B57XX_DMA_MODE_FIFOOVER |
+                      B57XX_DMA_MODE_OVERLENGTH);
     NdisStallExecution(40);
 
     /* Initialization Procedure step 84: Enable the receive data completion functional block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_RX_DATA_COMPL_MODE,
-                        &Value,
-                        B57XX_RX_DATA_COMPL_MODE_ENABLE | B57XX_RX_DATA_COMPL_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_RX_DATA_COMPL_MODE,
+                      B57XX_RX_DATA_COMPL_MODE_ENABLE | B57XX_RX_DATA_COMPL_MODE_ATTN);
 
     /* Initialization Procedure step 85: Enable the Mbuf cluster free functional block */
     if (!Adapter->B5705Plus)
     {
-        B57XXEnableRegister(Adapter,
-                            B57XX_REG_MBUF_CLUSTER_FREE,
-                            &Value,
-                            B57XX_MBUF_CLUSTER_FREE_ENABLE);
+        B57XXEnableRegInd(Adapter, B57XX_REG_MBUF_CLUSTER_FREE, B57XX_MBUF_CLUSTER_FREE_ENABLE);
     }
 
     /* Initialization Procedure step 86: Enable the send data completion functional block */
-    B57XXEnableRegister(Adapter, B57XX_REG_TX_COMPL_MODE, &Value, B57XX_TX_COMPL_MODE_ENABLE);
+    B57XXEnableRegInd(Adapter, B57XX_REG_TX_COMPL_MODE, B57XX_TX_COMPL_MODE_ENABLE);
 
     /* Initialization Procedure step 87: Enable the send BD completion functional block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_TX_BD_COMPL_MODE,
-                        &Value,
-                        B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_TX_BD_COMPL_MODE,
+                      B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
 
     /* Initialization Procedure step 88: Enable the Receive BD Initiator Functional Block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_RX_BD_MODE,
-                        &Value,
-                        B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_RX_BD_MODE,
+                      B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
 
     /* Initialization Procedure step 89: Enable the receive data & BD initiator functional block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_RX_DATA_BD_MODE,
-                        &Value,
-                        B57XX_RX_DATA_BD_MODE_ENABLE | B57XX_RX_DATA_BD_MODE_ILLEGALSZ);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_RX_DATA_BD_MODE,
+                      B57XX_RX_DATA_BD_MODE_ENABLE | B57XX_RX_DATA_BD_MODE_ILLEGALSZ);
 
     /* Initialization Procedure step 90: Enable the send data initiator functional block */
-    B57XXEnableRegister(Adapter, B57XX_REG_TX_DATA_MODE, &Value, B57XX_TX_DATA_MODE_ENABLE);
+    B57XXEnableRegInd(Adapter, B57XX_REG_TX_DATA_MODE, B57XX_TX_DATA_MODE_ENABLE);
 
     /* Initialization Procedure step 91: Enable the send BD initiator functional block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_TX_INITIATOR_MODE,
-                        &Value,
-                        B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_TX_INITIATOR_MODE,
+                      B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
 
     /* Initialization Procedure step 92: Enable the send BD selector functional block */
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_TX_RING_SELECTOR_MODE,
-                        &Value,
-                        B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_TX_RING_SELECTOR_MODE,
+                      B57XX_BD_MODE_ENABLE | B57XX_BD_MODE_ATTN);
 
     /* Initialization Procedure step 93 not applicable: Download firmware */
 
     /* Initialization Procedure step 94: Enable the transmit MAC */
-    B57XXWriteRegister(Adapter,
-                       B57XX_REG_ETH_TX_MODE,
-                       B57XX_ETH_TX_MODE_ENABLE | B57XX_ETH_TX_MODE_LOCKUPFIX);
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_ETH_TX_MODE,
+                     B57XX_ETH_TX_MODE_ENABLE | B57XX_ETH_TX_MODE_LOCKUPFIX);
     NdisStallExecution(100);
 
     /* Initialization Procedure step 95: Enable the receive MAC */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_RX_MODE, B57XX_ETH_RX_MODE_ENABLE);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_RX_MODE, B57XX_ETH_RX_MODE_ENABLE);
     NdisStallExecution(10);
 
     /* Initialization Procedure step 96: Disable auto-polling on management */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MI_MODE, 0xC0000);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MI_MODE, 0xC0000);
 
     /* Initialization Procedure step 98: Program Hardware to control LEDs */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_LED, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_LED, 0);
 
     /* Initialization Procedure step 99-100: Setup the physical layer & MAC functional blocks */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MI_STATUS, B57XX_ETH_MI_STATUS_LINK);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MI_STATUS, B57XX_ETH_MI_STATUS_LINK);
     Status = NICSetupPHY(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
@@ -839,7 +806,7 @@ NICSoftReset(
     NICApplyPacketFilter(Adapter);
 
     /* Initialization Procedure step 102: Enable interrupts (done later) */
-    B57XXDisableRegister(Adapter, B57XX_REG_MSI_MODE, &Value, B57XX_MSI_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_MSI_MODE, B57XX_MSI_MODE_ENABLE);
 
     Adapter->HardwareStatus = NdisHardwareStatusReady;
 
@@ -851,13 +818,13 @@ NICSetupPHY(
     _In_ PB57XX_ADAPTER Adapter)
 {
     /* PHY Initialization Procedure step 1: Disable link events */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_EVENT, 0x00);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_EVENT, 0x00);
 
     /* PHY Initialization Procedure step 2: Clear link attentions */
     B57XXClearMACAttentions(Adapter);
 
     /* PHY Initialization Procedure step 3: Disable Autopolling mode */
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MI_MODE, 0xC0000);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MI_MODE, 0xC0000);
 
     /* PHY Initialization Procedure step 4: Wait for the Auto Poll disable step to complete */
     NdisStallExecution(40);
@@ -877,12 +844,12 @@ NICSetupPHY(
     }
 
     /* PHY Initialization Procedure step 17: Enable port polling */
-    //B57XXEnableRegister(Adapter, B57XX_REG_ETH_MI_MODE, &Value, B57XX_ETH_MI_MODE_PORTPOLLING);
+    //B57XXEnableRegInd(Adapter, B57XX_REG_ETH_MI_MODE, B57XX_ETH_MI_MODE_PORTPOLLING);
 
     /* PHY Initialization Procedure step 18: Enable link attentions */
-    B57XXWriteRegister(Adapter,
-                       B57XX_REG_ETH_MAC_EVENT,
-                       B57XX_ETH_MAC_EVENT_LINKSTATE | B57XX_ETH_MAC_EVENT_MIINT);
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_ETH_MAC_EVENT,
+                     B57XX_ETH_MAC_EVENT_LINKSTATE | B57XX_ETH_MAC_EVENT_MIINT);
 
     return NDIS_STATUS_SUCCESS;
 }
@@ -917,8 +884,8 @@ NICUpdateLinkStatus(
         Value16 &= ~B57XX_PHY_AUTONEG_PAUSE;
         B57XXWritePHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT, Value16);
 
-        B57XXDisableRegister(Adapter, B57XX_REG_ETH_TX_MODE, &Value, B57XX_ETH_TX_MODE_FLOWCTRL);
-        B57XXDisableRegister(Adapter, B57XX_REG_ETH_RX_MODE, &Value, B57XX_ETH_RX_MODE_FLOWCTRL);
+        B57XXDisableRegInd(Adapter, B57XX_REG_ETH_TX_MODE, B57XX_ETH_TX_MODE_FLOWCTRL);
+        B57XXDisableRegInd(Adapter, B57XX_REG_ETH_RX_MODE, B57XX_ETH_RX_MODE_FLOWCTRL);
 
         B57XXClearMACAttentions(Adapter);
 
@@ -932,7 +899,7 @@ NICUpdateLinkStatus(
     NICSetupFlowControl(Adapter);
 
     /* PHY Initialization Procedure step 14-16: Configure MAC port mode, duplex, & polarity */
-    B57XXReadRegister(Adapter, B57XX_REG_ETH_MAC_MODE, &Value);
+    Value = B57XXReadRegInd(Adapter, B57XX_REG_ETH_MAC_MODE);
     Value &= ~(B57XX_ETH_MAC_MODE_HALFDUPLEX | B57XX_MASK_ETH_MAC_MODE_PORT);
     switch (Adapter->LinkStatus & B57XX_MASK_PHY_AUX_STATUS_MODE)
     {
@@ -968,7 +935,7 @@ NICUpdateLinkStatus(
             Value |= B57XX_ETH_MAC_MODE_PORT_NONE;
             break;
     }
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_MODE, Value);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_MODE, Value);
 
     B57XXClearMACAttentions(Adapter);
     return NDIS_STATUS_MEDIA_CONNECT;
@@ -1016,7 +983,7 @@ NICSetupFlowControl(
     }
 
 Finish:
-    B57XXReadRegister(Adapter, B57XX_REG_ETH_TX_MODE, &Value);
+    Value = B57XXReadRegInd(Adapter, B57XX_REG_ETH_TX_MODE);
     if (FlowControlTX)
     {
         Value |= B57XX_ETH_TX_MODE_FLOWCTRL;
@@ -1025,9 +992,9 @@ Finish:
     {
         Value &= ~B57XX_ETH_TX_MODE_FLOWCTRL;
     }
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_TX_MODE, Value);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_TX_MODE, Value);
 
-    B57XXReadRegister(Adapter, B57XX_REG_ETH_RX_MODE, &Value);
+    Value = B57XXReadRegInd(Adapter, B57XX_REG_ETH_RX_MODE);
     if (FlowControlRX)
     {
         Value |= B57XX_ETH_RX_MODE_FLOWCTRL;
@@ -1036,15 +1003,13 @@ Finish:
     {
         Value &= ~B57XX_ETH_RX_MODE_FLOWCTRL;
     }
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_RX_MODE, Value);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_RX_MODE, Value);
 }
 
 NDIS_STATUS
 NICShutdown(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    ULONG Value;
-
     if (Adapter->HardwareStatus != NdisHardwareStatusReady)
     {
         return NDIS_STATUS_FAILURE;
@@ -1052,59 +1017,46 @@ NICShutdown(
     Adapter->HardwareStatus = NdisHardwareStatusClosing;
 
     /* Receive path shutdown sequence. */
-    B57XXDisableRegister(Adapter, B57XX_REG_ETH_RX_MODE, &Value, B57XX_ETH_RX_MODE_ENABLE);
-    B57XXDisableRegister(Adapter, B57XX_REG_RX_BD_MODE, &Value, B57XX_BD_MODE_ENABLE);
-    B57XXDisableRegister(Adapter,
-                         B57XX_REG_RX_LIST_PLACE_MODE,
-                         &Value,
-                         B57XX_RX_LIST_PLACE_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_ETH_RX_MODE, B57XX_ETH_RX_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_RX_BD_MODE, B57XX_BD_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_RX_LIST_PLACE_MODE, B57XX_RX_LIST_PLACE_MODE_ENABLE);
     if (!Adapter->B5705Plus)
     {
-        B57XXDisableRegister(Adapter,
-                             B57XX_REG_RX_LIST_SELECT_MODE,
-                             &Value,
-                             B57XX_RX_LIST_SELECT_MODE_ENABLE);
+        B57XXDisableRegInd(Adapter,
+                           B57XX_REG_RX_LIST_SELECT_MODE,
+                           B57XX_RX_LIST_SELECT_MODE_ENABLE);
     }
-    B57XXDisableRegister(Adapter, B57XX_REG_RX_DATA_BD_MODE, &Value, B57XX_RX_DATA_BD_MODE_ENABLE);
-    B57XXDisableRegister(Adapter,
-                         B57XX_REG_RX_DATA_COMPL_MODE,
-                         &Value,
-                         B57XX_RX_DATA_COMPL_MODE_ENABLE);
-    B57XXDisableRegister(Adapter, B57XX_REG_RX_BD_COMPL_MODE, &Value, B57XX_BD_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_RX_DATA_BD_MODE, B57XX_RX_DATA_BD_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_RX_DATA_COMPL_MODE, B57XX_RX_DATA_COMPL_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_RX_BD_COMPL_MODE, B57XX_BD_MODE_ENABLE);
 
     /* Transmit path shutdown sequence. */
-    B57XXDisableRegister(Adapter, B57XX_REG_TX_RING_SELECTOR_MODE, &Value, B57XX_BD_MODE_ENABLE);
-    B57XXDisableRegister(Adapter, B57XX_REG_TX_INITIATOR_MODE, &Value, B57XX_BD_MODE_ENABLE);
-    B57XXDisableRegister(Adapter, B57XX_REG_TX_DATA_MODE, &Value, B57XX_TX_DATA_MODE_ENABLE);
-    B57XXDisableRegister(Adapter, B57XX_REG_DMA_READ_MODE, &Value, B57XX_DMA_MODE_ENABLE);
-    B57XXDisableRegister(Adapter, B57XX_REG_TX_COMPL_MODE, &Value, B57XX_TX_COMPL_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_TX_RING_SELECTOR_MODE, B57XX_BD_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_TX_INITIATOR_MODE, B57XX_BD_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_TX_DATA_MODE, B57XX_TX_DATA_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_DMA_READ_MODE, B57XX_DMA_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_TX_COMPL_MODE, B57XX_TX_COMPL_MODE_ENABLE);
     if (!Adapter->B5705Plus)
     {
-        B57XXDisableRegister(Adapter,
-                             B57XX_REG_DMA_COMPLETION,
-                             &Value,
-                             B57XX_DMA_COMPLETION_ENABLE);
+        B57XXDisableRegInd(Adapter, B57XX_REG_DMA_COMPLETION, B57XX_DMA_COMPLETION_ENABLE);
     }
-    B57XXDisableRegister(Adapter, B57XX_REG_TX_BD_COMPL_MODE, &Value, B57XX_BD_MODE_ENABLE);
-    B57XXDisableRegister(Adapter, B57XX_REG_ETH_MAC_MODE, &Value, B57XX_ETH_MAC_MODE_TXDMA);
-    B57XXDisableRegister(Adapter, B57XX_REG_ETH_TX_MODE, &Value, B57XX_ETH_TX_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_TX_BD_COMPL_MODE, B57XX_BD_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_ETH_MAC_MODE, B57XX_ETH_MAC_MODE_TXDMA);
+    B57XXDisableRegInd(Adapter, B57XX_REG_ETH_TX_MODE, B57XX_ETH_TX_MODE_ENABLE);
 
     /* Memory related state machines shutdown. */
-    B57XXDisableRegister(Adapter, B57XX_REG_COAL_HOST_MODE, &Value, B57XX_COAL_HOST_MODE_ENABLE);
-    B57XXDisableRegister(Adapter, B57XX_REG_DMA_WRITE_MODE, &Value, B57XX_DMA_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_COAL_HOST_MODE, B57XX_COAL_HOST_MODE_ENABLE);
+    B57XXDisableRegInd(Adapter, B57XX_REG_DMA_WRITE_MODE, B57XX_DMA_MODE_ENABLE);
     if (!Adapter->B5705Plus)
     {
-        B57XXDisableRegister(Adapter,
-                             B57XX_REG_MBUF_CLUSTER_FREE,
-                             &Value,
-                             B57XX_MBUF_CLUSTER_FREE_ENABLE);
+        B57XXDisableRegInd(Adapter, B57XX_REG_MBUF_CLUSTER_FREE, B57XX_MBUF_CLUSTER_FREE_ENABLE);
     }
-    B57XXWriteRegister(Adapter, B57XX_REG_FTQ_RESET, 0xFFFFFFFF);
-    B57XXWriteRegister(Adapter, B57XX_REG_FTQ_RESET, 0x00000000);
+    B57XXWriteRegInd(Adapter, B57XX_REG_FTQ_RESET, 0xFFFFFFFF);
+    B57XXWriteRegInd(Adapter, B57XX_REG_FTQ_RESET, 0x00000000);
     if (!Adapter->B5705Plus)
     {
-        B57XXDisableRegister(Adapter, B57XX_REG_BUF_MAN_MODE, &Value, B57XX_BUF_MAN_MODE_ENABLE);
-        B57XXDisableRegister(Adapter, B57XX_REG_MEM_ARB_MODE, &Value, B57XX_MEM_ARB_MODE_ENABLE);
+        B57XXDisableRegInd(Adapter, B57XX_REG_BUF_MAN_MODE, B57XX_BUF_MAN_MODE_ENABLE);
+        B57XXDisableRegInd(Adapter, B57XX_REG_MEM_ARB_MODE, B57XX_MEM_ARB_MODE_ENABLE);
     }
 
     return NDIS_STATUS_SUCCESS;
@@ -1116,11 +1068,11 @@ NICUpdateMACAddresses(
 {
     ULONG Value;
 
-    B57XXReadRegister(Adapter, B57XX_REG_ETH_MAC_ADDR1_HI, &Value);
+    Value = B57XXReadRegInd(Adapter, B57XX_REG_ETH_MAC_ADDR1_HI);
     Adapter->MACAddresses[0][0] = (Value >> 8) & 0xFF;
     Adapter->MACAddresses[0][1] = (Value >> 0) & 0xFF;
 
-    B57XXReadRegister(Adapter, B57XX_REG_ETH_MAC_ADDR1_LO, &Value);
+    Value = B57XXReadRegInd(Adapter, B57XX_REG_ETH_MAC_ADDR1_LO);
     Adapter->MACAddresses[0][2] = (Value >> 24) & 0xFF;
     Adapter->MACAddresses[0][3] = (Value >> 16) & 0xFF;
     Adapter->MACAddresses[0][4] = (Value >> 8) & 0xFF;
@@ -1139,14 +1091,13 @@ NDIS_STATUS
 NICUpdateMulticastList(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    ULONG Value;
     ULONG RegIndex;
     ULONG BitPos;
 
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 0, 0);
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 4, 0);
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 8, 0);
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 12, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 0, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 4, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 8, 0);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 12, 0);
 
     for (UINT i = 0; i < Adapter->MulticastListSize; i++)
     {
@@ -1156,7 +1107,7 @@ NICUpdateMulticastList(
 
         ASSERT(RegIndex < 4);
 
-        B57XXEnableRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 4 * RegIndex, &Value, (1 << BitPos));
+        B57XXEnableRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 4 * RegIndex, (1 << BitPos));
     }
 
     return NDIS_STATUS_SUCCESS;
@@ -1168,7 +1119,7 @@ NICApplyPacketFilter(
 {
     ULONG Value;
 
-    B57XXReadRegister(Adapter, B57XX_REG_ETH_RX_MODE, &Value);
+    Value = B57XXReadRegInd(Adapter, B57XX_REG_ETH_RX_MODE);
     Value &= ~(B57XX_ETH_RX_MODE_PROMISCUOUS | B57XX_ETH_RX_MODE_FILTBROAD);
     if (Adapter->PacketFilter & NDIS_PACKET_TYPE_PROMISCUOUS)
     {
@@ -1178,14 +1129,14 @@ NICApplyPacketFilter(
     {
         Value |= B57XX_ETH_RX_MODE_FILTBROAD;
     }
-    B57XXWriteRegister(Adapter, B57XX_REG_ETH_RX_MODE, Value);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_RX_MODE, Value);
 
     if (Adapter->PacketFilter & NDIS_PACKET_TYPE_ALL_MULTICAST)
     {
-        B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 0,  0xFFFFFFFF);
-        B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 4,  0xFFFFFFFF);
-        B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 8,  0xFFFFFFFF);
-        B57XXWriteRegister(Adapter, B57XX_REG_ETH_MAC_HASH + 12, 0xFFFFFFFF);
+        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 0,  0xFFFFFFFF);
+        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 4,  0xFFFFFFFF);
+        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 8,  0xFFFFFFFF);
+        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 12, 0xFFFFFFFF);
     }
     else
     {
@@ -1227,37 +1178,31 @@ NICEnableInterrupts(
 {
     ULONG Value;
 
-    B57XXReadULong(Adapter, B57XX_REG_MISC_HOST_CTRL, &Value);
+    Value = B57XXReadReg(Adapter, B57XX_REG_MISC_HOST_CTRL);
     Value &= ~B57XX_MISC_HOST_CTRL_MASKINTOUT;
-    B57XXWriteULong(Adapter, B57XX_REG_MISC_HOST_CTRL, Value);
+    B57XXWriteReg(Adapter, B57XX_REG_MISC_HOST_CTRL, Value);
 }
 
 VOID
 NICDisableInterrupts(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    ULONG Value;
-
-    B57XXEnableULong(Adapter, B57XX_REG_MISC_HOST_CTRL, &Value, B57XX_MISC_HOST_CTRL_MASKINTOUT);
+    B57XXEnableReg(Adapter, B57XX_REG_MISC_HOST_CTRL, B57XX_MISC_HOST_CTRL_MASKINTOUT);
 }
 
 VOID
 NICInterruptAcknowledge(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    ULONG Value;
-
     B57XXWriteMailbox(Adapter, B57XX_MBOX_INT_MAILBOX0, 1);
-    B57XXEnableRegister(Adapter, B57XX_REG_MISC_LOCAL_CTRL, &Value, B57XX_MISC_LOCAL_CTRL_CLEARINT);
+    B57XXEnableRegInd(Adapter, B57XX_REG_MISC_LOCAL_CTRL, B57XX_MISC_LOCAL_CTRL_CLEARINT);
 }
 
 BOOLEAN
 NICInterruptCheckAvailability(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    ULONG Value;
-
-    B57XXReadULong(Adapter, B57XX_MBOX_INT_MAILBOX0 + 4, &Value);
+    B57XXReadReg(Adapter, B57XX_MBOX_INT_MAILBOX0 + 4);
 
     return Adapter->Status.pBlock->Status & B57XX_SB_UPDATED;
 }
@@ -1348,30 +1293,27 @@ VOID
 NICOutputDebugInfo(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    ULONG Value;
-    ULONG ExtraValue;
+    NDIS_MinDbgPrint("Flow attention: 0x%lx\n",
+                     B57XXReadReg(Adapter, B57XX_REG_FLOW_ATTENTION));
 
-    B57XXReadULong(Adapter, B57XX_REG_FLOW_ATTENTION, &Value);
-    NDIS_MinDbgPrint("Flow attention: 0x%x\n", Value);
+    NDIS_MinDbgPrint("Ethernet MAC Status: 0x%lx\n",
+                     B57XXReadReg(Adapter, B57XX_REG_ETH_MAC_STATUS));
 
-    B57XXReadULong(Adapter, B57XX_REG_ETH_MAC_STATUS, &Value);
-    NDIS_MinDbgPrint("Ethernet MAC Status: 0x%x\n", Value);
+    NDIS_MinDbgPrint("MSI: (Mode: 0x%lx, Status: 0x%lx)\n",
+                     B57XXReadReg(Adapter, B57XX_REG_MSI_MODE),
+                     B57XXReadReg(Adapter, B57XX_REG_MSI_STATUS));
 
-    B57XXReadULong(Adapter, B57XX_REG_MSI_MODE, &Value);
-    B57XXReadULong(Adapter, B57XX_REG_MSI_STATUS, &ExtraValue);
-    NDIS_MinDbgPrint("MSI: (Mode: 0x%x, Status: 0x%x)\n", Value, ExtraValue);
+    NDIS_MinDbgPrint("DMA: (Read: 0x%lx, Write: 0x%lx)\n",
+                     B57XXReadReg(Adapter, B57XX_REG_DMA_READ_STATUS),
+                     B57XXReadReg(Adapter, B57XX_REG_DMA_WRITE_STATUS));
 
-    B57XXReadULong(Adapter, B57XX_REG_DMA_READ_STATUS, &Value);
-    B57XXReadULong(Adapter, B57XX_REG_DMA_WRITE_STATUS, &ExtraValue);
-    NDIS_MinDbgPrint("DMA: (Read: 0x%x, Write: 0x%x)\n", Value, ExtraValue);
+    NDIS_MinDbgPrint("RX RISC: (State: 0x%lx, Mode: 0x%lx)\n",
+                     B57XXReadRegInd(Adapter, B57XX_REG_RX_RISC_STATE),
+                     B57XXReadRegInd(Adapter, B57XX_REG_RX_RISC_MODE));
 
-    B57XXReadRegister(Adapter, B57XX_REG_RX_RISC_STATE, &Value);
-    B57XXReadRegister(Adapter, B57XX_REG_RX_RISC_MODE, &ExtraValue);
-    NDIS_MinDbgPrint("RX RISC: (State: 0x%x, Mode: 0x%x)\n", Value, ExtraValue);
-
-    B57XXReadRegister(Adapter, B57XX_REG_TX_RISC_STATE, &Value);
-    B57XXReadRegister(Adapter, B57XX_REG_TX_RISC_MODE, &ExtraValue);
-    NDIS_MinDbgPrint("TX RISC: (State: 0x%x, Mode: 0x%x)\n", Value, ExtraValue);
+    NDIS_MinDbgPrint("TX RISC: (State: 0x%lx, Mode: 0x%lx)\n",
+                     B57XXReadRegInd(Adapter, B57XX_REG_TX_RISC_STATE),
+                     B57XXReadRegInd(Adapter, B57XX_REG_TX_RISC_MODE));
 }
 
 /* B57XX FUNCTIONS ********************************************************************************/
@@ -1385,10 +1327,10 @@ B57XXWriteMemoryRCB(
     ULONG AddressBase = Address & 0xFFFF0000;
     ULONG Offset = B57XX_REG_MEM_WINDOW + (Address & 0x0000FFFF);
 
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_MEM_BASE, AddressBase);
+    B57XXWritePciConfig32(Adapter, B57XX_REG_MEM_BASE, AddressBase);
     *(PB57XX_RING_CONTROL_BLOCK)(Adapter->IoBase + Offset) = *pRCB;
 
-    B57XXWritePciConfigULong(Adapter, B57XX_REG_MEM_BASE, 0);
+    B57XXWritePciConfig32(Adapter, B57XX_REG_MEM_BASE, 0);
 }
 
 NDIS_STATUS
@@ -1400,16 +1342,16 @@ B57XXReadPHY(
     const ULONG PHYAddress = 0x01;
     ULONG Value32;
 
-    B57XXWriteULong(Adapter,
-                    B57XX_REG_ETH_MI_COMMUNICATION,
-                    (PHYAddress << 21) |
-                    (PHYRegOffset << 16) |
-                    B57XX_ETH_MI_COMMUNICATION_START |
-                    (0b10 << 26));
+    B57XXWriteReg(Adapter,
+                  B57XX_REG_ETH_MI_COMMUNICATION,
+                  (PHYAddress << 21) |
+                  (PHYRegOffset << 16) |
+                  B57XX_ETH_MI_COMMUNICATION_START |
+                  (0b10 << 26));
 
     for (UINT n = 0; n < MAX_ATTEMPTS_PHY; n++)
     {
-        B57XXReadULong(Adapter, B57XX_REG_ETH_MI_COMMUNICATION, &Value32);
+        Value32 = B57XXReadReg(Adapter, B57XX_REG_ETH_MI_COMMUNICATION);
         if (!(Value32 & B57XX_ETH_MI_COMMUNICATION_START))
         {
             break;
@@ -1436,17 +1378,17 @@ B57XXWritePHY(
     const ULONG PHYAddress = 0x01;
     ULONG Value32;
 
-    B57XXWriteULong(Adapter,
-                    B57XX_REG_ETH_MI_COMMUNICATION,
-                    (PHYAddress << 21) |
-                    (PHYRegOffset << 16) |
-                    (Value & 0xFFFF) |
-                    B57XX_ETH_MI_COMMUNICATION_START |
-                    (0b01 << 26));
+    B57XXWriteReg(Adapter,
+                  B57XX_REG_ETH_MI_COMMUNICATION,
+                  (PHYAddress << 21) |
+                  (PHYRegOffset << 16) |
+                  (Value & 0xFFFF) |
+                  B57XX_ETH_MI_COMMUNICATION_START |
+                  (0b01 << 26));
 
     for (UINT n = 0; n < MAX_ATTEMPTS_PHY; n++)
     {
-        B57XXReadULong(Adapter, B57XX_REG_ETH_MI_COMMUNICATION, &Value32);
+        Value32 = B57XXReadReg(Adapter, B57XX_REG_ETH_MI_COMMUNICATION);
         if (!(Value32 & B57XX_ETH_MI_COMMUNICATION_START))
         {
             break;
@@ -1466,14 +1408,11 @@ VOID
 B57XXClearMACAttentions(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    ULONG Value;
-
-    B57XXEnableRegister(Adapter,
-                        B57XX_REG_ETH_MAC_STATUS,
-                        &Value,
-                        B57XX_ETH_MAC_STATUS_CONFIGCHANGED |
-                        B57XX_ETH_MAC_STATUS_SYNCCHANGED |
-                        B57XX_ETH_MAC_STATUS_MICOMPLETE);
+    B57XXEnableRegInd(Adapter,
+                      B57XX_REG_ETH_MAC_STATUS,
+                      B57XX_ETH_MAC_STATUS_CONFIGCHANGED |
+                      B57XX_ETH_MAC_STATUS_SYNCCHANGED |
+                      B57XX_ETH_MAC_STATUS_MICOMPLETE);
 }
 
 VOID
@@ -1514,12 +1453,12 @@ B57XXReadStatistic(
     {
         if (Is64Bit)
         {
-            B57XXReadULong(Adapter, RegOffset + 0, &pLargeInt->HighPart);
-            B57XXReadULong(Adapter, RegOffset + 4, &pLargeInt->LowPart);
+            pLargeInt->HighPart = B57XXReadReg(Adapter, RegOffset + 0);
+            pLargeInt->LowPart = B57XXReadReg(Adapter, RegOffset + 4);
         }
         else
         {
-            B57XXReadULong(Adapter, RegOffset, &pLargeInt->LowPart);
+            pLargeInt->LowPart = B57XXReadReg(Adapter, RegOffset);
         }
     }
 }
