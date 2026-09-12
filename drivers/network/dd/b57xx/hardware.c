@@ -240,9 +240,9 @@ NICSoftReset(
     NICDisableInterrupts(Adapter);
 
     /* Initialization Procedure step 11: Disable PCI-X Relaxed Ordering */
-    NdisReadRegisterUshort((PUSHORT)(Adapter->IoBase + B57XX_REG_PCIX_COMMAND), &Value);
+    Value = B57XXReadPciConfig16(Adapter, B57XX_REG_PCIX_COMMAND);
     Value &= ~B57XX_PCIX_COMMAND_RELAXEDORDER;
-    NdisWriteRegisterUshort((PUSHORT)(Adapter->IoBase + B57XX_REG_PCIX_COMMAND), Value);
+    B57XXWritePciConfig16(Adapter, B57XX_REG_PCIX_COMMAND, Value);
 
     /* Initialization Procedure step 12: Enable the MAC memory arbiter */
     B57XXEnableReg(Adapter, B57XX_REG_MEM_ARB_MODE, B57XX_MEM_ARB_MODE_ENABLE);
@@ -325,10 +325,11 @@ NICSoftReset(
     B57XXEnableRegInd(Adapter, B57XX_REG_MISC_HOST_CTRL, B57XX_MISC_HOST_CTRL_TAGGEDSTATUS);
 
     /* Initialization Procedure step 23: Restore select PCI registers */
-    NdisWriteRegisterUchar((PUCHAR)(Adapter->IoBase + B57XX_REG_CACHE_LINE_SIZE),
-                           Adapter->PciState.CacheLineSize);
-    NdisWriteRegisterUshort((PUSHORT)(Adapter->IoBase + B57XX_REG_SUBSY_VENDORID),
-                            Adapter->PciState.SubVendorID);
+    B57XXWritePciConfig8(Adapter, B57XX_REG_CACHE_LINE_SIZE, Adapter->PciState.CacheLineSize);
+    /* Not writable by PCI configuration access */
+    B57XXWriteRegInd(Adapter,
+                     B57XX_REG_SUBSY_VENDORID,
+                     (Adapter->PciState.SubSystemID << 16) | Adapter->PciState.SubVendorID);
 
     /* Initialization Procedure steps 24-25: Clear the MAC/driver statistics (not applicable) */
 
@@ -362,8 +363,8 @@ NICSoftReset(
     }
     else
     {
-        NdisReadRegisterUshort((PUSHORT)(Adapter->IoBase + B57XX_REG_DEVICE_CTRL), &Value);
-        Value = (Value & (0b111 << 5)) ? 0x76380000 : 0x76180000;
+        USHORT DevCtrl = B57XXReadPciConfig16(Adapter, B57XX_REG_DEVICE_CTRL);
+        Value = (DevCtrl & (0b111 << 5)) ? 0x76380000 : 0x76180000;
     }
     B57XXWriteRegInd(Adapter, B57XX_REG_DMA_CTRL, Value);
 

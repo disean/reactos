@@ -320,6 +320,22 @@ NICOutputDebugInfo(
 /* B57XX FUNCTIONS ********************************************************************************/
 
 FORCEINLINE
+USHORT
+B57XXReadPciConfig16(
+    _In_ PB57XX_ADAPTER Adapter,
+    _In_ ULONG Offset)
+{
+    USHORT Value;
+
+    NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle,
+                               0,
+                               Offset,
+                               &Value,
+                               sizeof(Value));
+    return Value;
+}
+
+FORCEINLINE
 ULONG
 B57XXReadPciConfig32(
     _In_ PB57XX_ADAPTER Adapter,
@@ -333,6 +349,34 @@ B57XXReadPciConfig32(
                                &Value,
                                sizeof(Value));
     return Value;
+}
+
+FORCEINLINE
+VOID
+B57XXWritePciConfig8(
+    _In_ PB57XX_ADAPTER Adapter,
+    _In_ ULONG Offset,
+    _In_ UCHAR Value)
+{
+    NdisWritePciSlotInformation(Adapter->MiniportAdapterHandle,
+                                0,
+                                Offset,
+                                &Value,
+                                sizeof(Value));
+}
+
+FORCEINLINE
+VOID
+B57XXWritePciConfig16(
+    _In_ PB57XX_ADAPTER Adapter,
+    _In_ ULONG Offset,
+    _In_ USHORT Value)
+{
+    NdisWritePciSlotInformation(Adapter->MiniportAdapterHandle,
+                                0,
+                                Offset,
+                                &Value,
+                                sizeof(Value));
 }
 
 FORCEINLINE
