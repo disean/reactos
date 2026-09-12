@@ -133,12 +133,6 @@ NICPowerOn(
 
     Adapter->HardwareStatus = NdisHardwareStatusNotReady;
 
-    /* Initialization Procedure step 1: Enable MAC memory space decode and bus mastering */
-    B57XXEnableUShort(Adapter,
-                      B57XX_REG_COMMAND,
-                      &Value,
-                      B57XX_COMMAND_MEMSPACE | B57XX_COMMAND_BUSMASTER);
-
     /* Initialization Procedure step 2: Disable interrupts */
     B57XXEnableULong(Adapter, B57XX_REG_MISC_HOST_CTRL, &Value, B57XX_MISC_HOST_CTRL_CINTA);
     NICDisableInterrupts(Adapter);
@@ -247,12 +241,6 @@ NICSoftReset(
 
     /* Initialization Procedure step 9: Disable interrupts */
     NICDisableInterrupts(Adapter);
-
-    /* Initialization Procedure step 10: Enable MAC memory space decode and bus mastering */
-    NdisWriteRegisterUshort((PUSHORT)(Adapter->IoBase + B57XX_REG_COMMAND),
-                            Adapter->PciState.Command |
-                            B57XX_COMMAND_MEMSPACE |
-                            B57XX_COMMAND_BUSMASTER);
 
     /* Initialization Procedure step 11: Disable PCI-X Relaxed Ordering */
     NdisReadRegisterUshort((PUSHORT)(Adapter->IoBase + B57XX_REG_PCIX_COMMAND), &Value);
@@ -834,9 +822,6 @@ NICSoftReset(
 
     /* Initialization Procedure step 96: Disable auto-polling on management */
     B57XXWriteRegister(Adapter, B57XX_REG_ETH_MI_MODE, 0xC0000);
-
-    /* Initialization Procedure step 97: Configure D0 power state in PMSCR */
-    B57XXEnableUShort(Adapter, B57XX_REG_POWER_MANAGEMENT, &Value, B57XX_POWER_MANAGEMENT_STATE_D0);
 
     /* Initialization Procedure step 98: Program Hardware to control LEDs */
     B57XXWriteRegister(Adapter, B57XX_REG_ETH_LED, 0);

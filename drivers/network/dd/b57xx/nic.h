@@ -349,19 +349,6 @@ B57XXWritePciConfigULong(
 
 FORCEINLINE
 VOID
-B57XXEnableUShort(
-    _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG Address,
-    _Inout_ PULONG pValue,
-    _In_ ULONG Mask)
-{
-    NdisReadRegisterUshort((PUSHORT)(Adapter->IoBase + Address), pValue);
-    *pValue |= Mask;
-    NdisWriteRegisterUshort((PUSHORT)(Adapter->IoBase + Address), *pValue);
-}
-
-FORCEINLINE
-VOID
 B57XXReadULong(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
