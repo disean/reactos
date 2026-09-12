@@ -14,8 +14,9 @@ ULONG DebugTraceLevel = MIN_TRACE;
 
 static
 NDIS_STATUS
-InitAdapterResources(_In_ PB57XX_ADAPTER Adapter,
-                     _In_ PNDIS_RESOURCE_LIST ResourceList)
+InitAdapterResources(
+    _In_ PB57XX_ADAPTER Adapter,
+    _In_ PNDIS_RESOURCE_LIST ResourceList)
 {
     for (UINT n = 0; n < ResourceList->Count; n++)
     {
@@ -56,63 +57,68 @@ InitAdapterResources(_In_ PB57XX_ADAPTER Adapter,
 
 static
 NDIS_STATUS
-InitAllocateSharedMemory(_In_  PB57XX_ADAPTER Adapter,
-                         _In_  ULONG Length,
-                         _Out_ PVOID* pVirtualAddress,
-                         _Out_ PB57XX_PHYSICAL_ADDRESS pPhysicalAddress)
+InitAllocateSharedMemory(
+    _In_ PB57XX_ADAPTER Adapter,
+    _In_ ULONG Length,
+    _Out_ PVOID* pVirtualAddress,
+    _Out_ PB57XX_PHYSICAL_ADDRESS pPhysicalAddress)
 {
     NDIS_PHYSICAL_ADDRESS Tmp;
-    
+
     NdisMAllocateSharedMemory(Adapter->MiniportAdapterHandle, Length, FALSE, pVirtualAddress, &Tmp);
     if (*pVirtualAddress == NULL)
     {
         return NDIS_STATUS_RESOURCES;
     }
-    
+
     NdisZeroMemory(*pVirtualAddress, Length);
-    
+
     B57XXConvertAddress(pPhysicalAddress, &Tmp);
-    
+
     return NDIS_STATUS_SUCCESS;
 }
 
 static
 NDIS_STATUS
-FreeSharedMemory(_In_ PB57XX_ADAPTER Adapter,
-                 _In_ ULONG Length,
-                 _In_ PVOID VirtualAddress,
-                 _In_ PB57XX_PHYSICAL_ADDRESS pPhysicalAddress)
+FreeSharedMemory(
+    _In_ PB57XX_ADAPTER Adapter,
+    _In_ ULONG Length,
+    _In_ PVOID VirtualAddress,
+    _In_ PB57XX_PHYSICAL_ADDRESS pPhysicalAddress)
 {
     NDIS_PHYSICAL_ADDRESS Tmp;
-    
+
     if (VirtualAddress == NULL)
     {
         return NDIS_STATUS_SOFT_ERRORS;
     }
-    
+
     Tmp.HighPart = pPhysicalAddress->HighPart;
     Tmp.LowPart = pPhysicalAddress->LowPart;
-    
+
     NdisMFreeSharedMemory(Adapter->MiniportAdapterHandle, Length, FALSE, VirtualAddress, Tmp);
-    
+
     return NDIS_STATUS_SUCCESS;
 }
 
 NDIS_STATUS
 NTAPI
-MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
-                   _Out_ PUINT SelectedMediumIndex,
-                   _In_  PNDIS_MEDIUM MediumArray,
-                   _In_  UINT MediumArraySize,
-                   _In_  NDIS_HANDLE MiniportAdapterHandle,
-                   _In_  NDIS_HANDLE WrapperConfigurationContext)
+MiniportInitialize(
+    _Out_ PNDIS_STATUS OpenErrorStatus,
+    _Out_ PUINT SelectedMediumIndex,
+    _In_  PNDIS_MEDIUM MediumArray,
+    _In_ UINT MediumArraySize,
+    _In_ NDIS_HANDLE MiniportAdapterHandle,
+    _In_ NDIS_HANDLE WrapperConfigurationContext)
 {
-    NDIS_STATUS Status;
     PB57XX_ADAPTER Adapter;
+    NDIS_STATUS Status;
     PCI_COMMON_CONFIG PCIConfig;
     UINT i;
     PNDIS_RESOURCE_LIST ResourceList = NULL;
     UINT ResourceListSize = 0;
+
+    UNREFERENCED_PARAMETER(OpenErrorStatus);
 
     /* Make sure the medium is supported */
     for (i = 0; i < MediumArraySize; i++)
@@ -128,28 +134,28 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
         NDIS_MinDbgPrint("802.3 medium was not found in the medium array\n");
         return NDIS_STATUS_UNSUPPORTED_MEDIA;
     }
-    
+
     /* Allocate our adapter context */
-    Status = NdisAllocateMemoryWithTag((PVOID*)&Adapter, sizeof(B57XX_ADAPTER), B57XX_TAG);
+    Status = NdisAllocateMemoryWithTag((PVOID*)&Adapter, sizeof(*Adapter), B57XX_TAG);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Failed to allocate adapter context (0x%x)\n", Status);
+        NDIS_MinDbgPrint("Failed to allocate adapter context (0x%lx)\n", (ULONG)Status);
         return NDIS_STATUS_RESOURCES;
     }
-    
+
     NdisZeroMemory(Adapter, sizeof(*Adapter));
     Adapter->MiniportAdapterHandle = MiniportAdapterHandle;
     Adapter->HardwareStatus = NdisHardwareStatusNotReady;
     NdisAllocateSpinLock(&Adapter->Interrupt.Lock);
     NdisAllocateSpinLock(&Adapter->SendLock);
-    
+
     /* Notify NDIS of some characteristics of our NIC */
     NdisMSetAttributesEx(Adapter->MiniportAdapterHandle,
                          Adapter,
                          0,
                          NDIS_ATTRIBUTE_BUS_MASTER,
                          NdisInterfacePci);
-    
+
     /* Get PCI configuration of our NIC */
     NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle,
                                0,
@@ -182,7 +188,7 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
         NDIS_MinDbgPrint("Failed to allocate resource list (0x%x)\n", Status);
         goto Cleanup;
     }
-    
+
     NdisMQueryAdapterResources(&Status,
                                WrapperConfigurationContext,
                                ResourceList,
@@ -195,7 +201,7 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
 
     ASSERT(ResourceList->Version == 1);
     ASSERT(ResourceList->Revision == 1);
-    
+
     /* Begin hardware initialization */
     Status = InitAdapterResources(Adapter, ResourceList);
     if (Status != NDIS_STATUS_SUCCESS)
@@ -205,13 +211,13 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
 
     NdisFreeMemory(ResourceList, ResourceListSize, 0);
     ResourceList = NULL;
-    
+
     Status = NICConfigureAdapter(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         goto Cleanup;
     }
-    
+
     /* Map physical IO address */
     Status = NdisMMapIoSpace((PVOID*)&Adapter->IoBase,
                              Adapter->MiniportAdapterHandle,
@@ -222,10 +228,10 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
         NDIS_MinDbgPrint("Unable to map IO memory (0x%x)\n", Status);
         return Status;
     }
-    
+
     /* Allocate the DMA resources */
     Status = NdisMInitializeScatterGatherDma(MiniportAdapterHandle,
-                                             FALSE, 
+                                             FALSE,
                                              Adapter->MaxFrameSize);
     if (Status != NDIS_STATUS_SUCCESS)
     {
@@ -233,19 +239,19 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
         Status = NDIS_STATUS_RESOURCES;
         goto Cleanup;
     }
-    
+
     /* Allocate standard receive producer ring & buffer */
     Status = InitAllocateSharedMemory(Adapter,
-                                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) * 
+                                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *
                                       Adapter->StandardProducer.Count,
                                       (PVOID*)&Adapter->StandardProducer.pRing,
                                       &Adapter->StandardProducer.RingControlBlock.HostRingAddress);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Unable to allocate standard receive consumer ring");
+        NDIS_MinDbgPrint("Unable to allocate standard receive consumer ring\n");
         goto Cleanup;
     }
-    
+
     Status = InitAllocateSharedMemory(Adapter,
                                       Adapter->StandardProducer.FrameBufferLength *
                                       Adapter->StandardProducer.Count,
@@ -253,10 +259,10 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
                                       &Adapter->StandardProducer.pRing[0].HostAddress);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Unable to allocate host receive buffers");
+        NDIS_MinDbgPrint("Unable to allocate host receive buffers\n");
         goto Cleanup;
     }
-    
+
     for (i = 0; i < Adapter->StandardProducer.Count; i++)
     {
         if (i != 0)
@@ -271,42 +277,42 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
         Adapter->StandardProducer.pRing[i].Length = Adapter->StandardProducer.FrameBufferLength;
         Adapter->StandardProducer.pRing[i].Flags = B57XX_RBD_PACKET_END;
     }
-    
+
     /* Allocate receive return consumer ring */
     Status = InitAllocateSharedMemory(Adapter,
-                                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) * 
+                                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *
                                       Adapter->ReturnConsumer[0].Count,
                                       (PVOID*)&Adapter->ReturnConsumer[0].pRing,
                                       &Adapter->ReturnConsumer[0].RingControlBlock.HostRingAddress);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Unable to allocate receive return ring");
+        NDIS_MinDbgPrint("Unable to allocate receive return ring\n");
         goto Cleanup;
     }
-    
+
     /* Allocate send producer ring & packet list */
     Status = InitAllocateSharedMemory(Adapter,
-                                      sizeof(B57XX_SEND_BUFFER_DESCRIPTOR) * 
+                                      sizeof(B57XX_SEND_BUFFER_DESCRIPTOR) *
                                       Adapter->SendProducer[0].Count,
                                       (PVOID*)&Adapter->SendProducer[0].pRing,
                                       &Adapter->SendProducer[0].RingControlBlock.HostRingAddress);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Unable to allocate send ring");
+        NDIS_MinDbgPrint("Unable to allocate send ring\n");
         goto Cleanup;
     }
-    
+
     Status = NdisAllocateMemoryWithTag((PVOID*)&Adapter->SendProducer[0].pPacketList,
                                        sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count,
                                        B57XX_TAG);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Unable to allocate transmit packet pointer list");
+        NDIS_MinDbgPrint("Unable to allocate transmit packet pointer list\n");
         goto Cleanup;
     }
     NdisZeroMemory(Adapter->SendProducer[0].pPacketList,
                    sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count);
-    
+
     /* Allocate status block */
     NdisMAllocateSharedMemory(Adapter->MiniportAdapterHandle,
                               sizeof(B57XX_STATUS_BLOCK),
@@ -315,11 +321,11 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
                               &Adapter->Status.HostAddress);
     if (Adapter->Status.pBlock == NULL)
     {
-        NDIS_MinDbgPrint("Unable to allocate status block");
+        NDIS_MinDbgPrint("Unable to allocate status block\n");
         goto Cleanup;
     }
     NdisZeroMemory(Adapter->Status.pBlock, sizeof(B57XX_STATUS_BLOCK));
-    
+
     /* Allocate statistics block */
     if (!Adapter->B5705Plus)
     {
@@ -330,17 +336,17 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
                                   &Adapter->Statistics.HostAddress);
         if (Adapter->Statistics.pBlock == NULL)
         {
-            NDIS_MinDbgPrint("Unable to allocate statistics block");
+            NDIS_MinDbgPrint("Unable to allocate statistics block\n");
             goto Cleanup;
         }
         NdisZeroMemory(Adapter->Statistics.pBlock, sizeof(B57XX_STATISTICS_BLOCK));
     }
-    
+
     /* Adapter setup */
     Status = NICPowerOn(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Unable to power on NIC (0x%x)\n", Status);
+        NDIS_MinDbgPrint("Unable to power on NIC (0x%lx)\n", (ULONG)Status);
         goto Cleanup;
     }
 
@@ -355,11 +361,11 @@ MiniportInitialize(_Out_ PNDIS_STATUS OpenErrorStatus,
                                     NdisInterruptLatched : NdisInterruptLevelSensitive);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Unable to register interrupt (0x%x)\n", Status);
+        NDIS_MinDbgPrint("Unable to register interrupt (0x%lx)\n", (ULONG)Status);
         goto Cleanup;
     }
     Adapter->Interrupt.Registered = TRUE;
-    
+
     NICEnableInterrupts(Adapter);
 
     return NDIS_STATUS_SUCCESS;
@@ -377,37 +383,39 @@ Cleanup:
 
 NDIS_STATUS
 NTAPI
-MiniportReset(_Out_ PBOOLEAN AddressingReset,
-              _In_ NDIS_HANDLE MiniportAdapterContext)
+MiniportReset(
+    _Out_ PBOOLEAN AddressingReset,
+    _In_ NDIS_HANDLE MiniportAdapterContext)
 {
+    PB57XX_ADAPTER Adapter = MiniportAdapterContext;
     NDIS_STATUS Status;
-    PB57XX_ADAPTER Adapter = (PB57XX_ADAPTER)MiniportAdapterContext;
-    
+
     NDIS_MinDbgPrint("B57XX Reset\n");
 
     *AddressingReset = TRUE;
-    
+
     Status = NICSoftReset(Adapter);
     if (Status == NDIS_STATUS_SUCCESS)
     {
         NICEnableInterrupts(Adapter);
     }
-    
+
     return Status;
 }
 
 VOID
 NTAPI
-MiniportHalt(_In_ NDIS_HANDLE MiniportAdapterContext)
+MiniportHalt(
+    _In_ NDIS_HANDLE MiniportAdapterContext)
 {
-    PB57XX_ADAPTER Adapter = (PB57XX_ADAPTER)MiniportAdapterContext;
-    
+    PB57XX_ADAPTER Adapter = MiniportAdapterContext;
+
     NDIS_MinDbgPrint("B57XX Halt\n");
 
     ASSERT(Adapter != NULL);
-    
+
     Adapter->HardwareStatus = NdisHardwareStatusNotReady;
-    
+
     /* Unregister interrupts */
     if (Adapter->Interrupt.Registered)
     {
@@ -417,53 +425,53 @@ MiniportHalt(_In_ NDIS_HANDLE MiniportAdapterContext)
     }
 
     NICShutdown(Adapter);
-    
+
     /* Free shared resources */
     FreeSharedMemory(Adapter,
                      Adapter->StandardProducer.FrameBufferLength * Adapter->StandardProducer.Count,
-                     (PVOID)Adapter->StandardProducer.HostBuffer,
+                     Adapter->StandardProducer.HostBuffer,
                      &Adapter->StandardProducer.pRing[0].HostAddress);
-    
+
     FreeSharedMemory(Adapter,
                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *  Adapter->StandardProducer.Count,
-                     (PVOID)Adapter->StandardProducer.pRing,
+                     Adapter->StandardProducer.pRing,
                      &Adapter->StandardProducer.RingControlBlock.HostRingAddress);
-    
+
     FreeSharedMemory(Adapter,
                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) * Adapter->ReturnConsumer[0].Count,
-                     (PVOID)Adapter->ReturnConsumer[0].pRing,
+                     Adapter->ReturnConsumer[0].pRing,
                      &Adapter->ReturnConsumer[0].RingControlBlock.HostRingAddress);
-    
+
     FreeSharedMemory(Adapter,
                      sizeof(B57XX_SEND_BUFFER_DESCRIPTOR) * Adapter->SendProducer[0].Count,
-                     (PVOID)Adapter->SendProducer[0].pRing,
+                     Adapter->SendProducer[0].pRing,
                      &Adapter->SendProducer[0].RingControlBlock.HostRingAddress);
-    
+
     if (Adapter->SendProducer[0].pPacketList != NULL)
     {
         NdisFreeMemory(Adapter->SendProducer[0].pPacketList,
                        sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count,
                        0);
     }
-    
+
     if (Adapter->Status.pBlock != NULL)
     {
         NdisMFreeSharedMemory(Adapter->MiniportAdapterHandle,
-                              sizeof(B57XX_STATUS_BLOCK),
+                              sizeof(*Adapter->Status.pBlock),
                               FALSE,
-                              (PVOID)Adapter->Status.pBlock,
+                              Adapter->Status.pBlock,
                               Adapter->Status.HostAddress);
     }
-    
+
     if (Adapter->Statistics.pBlock != NULL)
     {
         NdisMFreeSharedMemory(Adapter->MiniportAdapterHandle,
-                              sizeof(B57XX_STATISTICS_BLOCK),
+                              sizeof(*Adapter->Statistics.pBlock),
                               FALSE,
-                              (PVOID)Adapter->Statistics.pBlock,
+                              Adapter->Statistics.pBlock,
                               Adapter->Statistics.HostAddress);
     }
-    
+
     /* Free MMIO */
     if (Adapter->IoBase)
     {
@@ -471,32 +479,33 @@ MiniportHalt(_In_ NDIS_HANDLE MiniportAdapterContext)
     }
 
     /* Destroy the adapter context */
-    NdisFreeMemory(Adapter, sizeof(B57XX_ADAPTER), 0);
+    NdisFreeMemory(Adapter, sizeof(*Adapter), 0);
 }
 
 NDIS_STATUS
 NTAPI
-MiniportSend(_In_ NDIS_HANDLE MiniportAdapterContext,
-             _In_ PNDIS_PACKET Packet,
-             _In_ UINT Flags)
+MiniportSend(
+    _In_ NDIS_HANDLE MiniportAdapterContext,
+    _In_ PNDIS_PACKET Packet,
+    _In_ UINT Flags)
 {
-    PB57XX_ADAPTER Adapter = (PB57XX_ADAPTER)MiniportAdapterContext;
+    PB57XX_ADAPTER Adapter = MiniportAdapterContext;
     NDIS_STATUS Status = NDIS_STATUS_PENDING;
     PSCATTER_GATHER_LIST SGList = NDIS_PER_PACKET_INFO_FROM_PACKET(Packet,
                                                                    ScatterGatherListPacketInfo);
     LONG BusyDescriptors = Adapter->SendProducer[0].ProducerIndex -
                            Adapter->SendProducer[0].ConsumerIndex;
-    
+
     ASSERT(SGList != NULL);
     ASSERT(SGList->NumberOfElements >= 1);
-    
+
     NdisDprAcquireSpinLock(&Adapter->SendLock);
-    
+
     if (BusyDescriptors < 0)
     {
         BusyDescriptors += Adapter->SendProducer[0].Count;
     }
-    
+
     if (Adapter->SendProducer[0].RingFull == TRUE ||
         BusyDescriptors + SGList->NumberOfElements > Adapter->SendProducer[0].Count)
     {
@@ -504,11 +513,11 @@ MiniportSend(_In_ NDIS_HANDLE MiniportAdapterContext,
         Status = NDIS_STATUS_RESOURCES;
         goto Exit;
     }
-    
+
     for (UINT i = 0; i < SGList->NumberOfElements; i++)
     {
         ASSERT(SGList->Elements[i].Length <= Adapter->MaxFrameSize);
-        
+
         Adapter->SendProducer[0].pPacketList[Adapter->SendProducer[0].ProducerIndex] = Packet;
 
         NICTransmitPacket(Adapter,
@@ -516,7 +525,7 @@ MiniportSend(_In_ NDIS_HANDLE MiniportAdapterContext,
                           SGList->Elements[i].Length,
                           i == SGList->NumberOfElements - 1 ? B57XX_SBD_PACKET_END : 0);
     }
-    
+
     if (Adapter->SendProducer[0].ProducerIndex == Adapter->SendProducer[0].ConsumerIndex)
     {
         NDIS_MinDbgPrint("Send ring is full\n");
@@ -525,18 +534,23 @@ MiniportSend(_In_ NDIS_HANDLE MiniportAdapterContext,
 
 Exit:
     NdisDprReleaseSpinLock(&Adapter->SendLock);
-    
+
     return Status;
 }
 
 NTSTATUS
 NTAPI
-DriverEntry(_In_ PDRIVER_OBJECT DriverObject,
-            _In_ PUNICODE_STRING RegistryPath)
+DriverEntry(
+    _In_ PDRIVER_OBJECT DriverObject,
+    _In_ PUNICODE_STRING RegistryPath)
 {
     NDIS_HANDLE WrapperHandle;
     NDIS_STATUS Status;
     NDIS_MINIPORT_CHARACTERISTICS Characteristics = {0};
+
+    NdisMInitializeWrapper(&WrapperHandle, DriverObject, RegistryPath, NULL);
+    if (!WrapperHandle)
+        return NDIS_STATUS_FAILURE;
 
     Characteristics.MajorNdisVersion = NDIS_MINIPORT_MAJOR_VERSION;
     Characteristics.MinorNdisVersion = NDIS_MINIPORT_MINOR_VERSION;
@@ -557,16 +571,10 @@ DriverEntry(_In_ PDRIVER_OBJECT DriverObject,
     Characteristics.SendPacketsHandler = NULL;
     Characteristics.AllocateCompleteHandler = NULL;
 
-    NdisMInitializeWrapper(&WrapperHandle, DriverObject, RegistryPath, NULL);
-    if (!WrapperHandle)
-    {
-        return NDIS_STATUS_FAILURE;
-    }
-
     Status = NdisMRegisterMiniport(WrapperHandle, &Characteristics, sizeof(Characteristics));
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NdisTerminateWrapper(WrapperHandle, 0);
+        NdisTerminateWrapper(WrapperHandle, NULL);
         return Status;
     }
 

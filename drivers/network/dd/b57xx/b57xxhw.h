@@ -30,7 +30,7 @@
 #endif
 
 #define B57XX_ENDIAN_SWAP(ByteSwap, ByteSwapReg, WordSwap, WordSwapReg)                            \
-    ((ByteSwap ? ByteSwapReg : 0) | (WordSwap ? WordSwapReg : 0))
+    (((ByteSwap) ? (ByteSwapReg) : 0) | ((WordSwap) ? (WordSwapReg) : 0))
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define B57XX_PAIRED_WORD(Word1, Word2)                                                            \
@@ -48,7 +48,7 @@
     }
 #endif
 
-#define BIT(x)  (1 << x)
+#define BIT(x)  (1U << (x))
 
 typedef UCHAR MAC_ADDRESS[IEEE_802_ADDR_LENGTH], *PMAC_ADDRESS;
 
@@ -480,12 +480,12 @@ typedef enum _B57XX_DEVICE_ID
 #define B57XX_PCIX_COMMAND_RELAXEDORDER BIT(1)  /* Enable Relaxed Ordering, R/W */
 
 /* B57XX_POWER_MANAGEMENT */
-#define B57XX_POWER_MANAGEMENT_STATE_D0     (0b00 << 0) /* Power State D0, R/W */
-#define B57XX_POWER_MANAGEMENT_STATE_D1     (0b01 << 0) /* Power State D1, R/W */
-#define B57XX_POWER_MANAGEMENT_STATE_D2     (0b10 << 0) /* Power State D2, R/W */
-#define B57XX_POWER_MANAGEMENT_STATE_D3     (0b11 << 0) /* Power State D3, R/W */
-#define B57XX_POWER_MANAGEMENT_PMEENABLE    BIT(8)      /* PME Enable, R/O */
-#define B57XX_POWER_MANAGEMENT_PMESTATUS    BIT(15)     /* PME Status, R/W2C */
+#define B57XX_POWER_MANAGEMENT_STATE_D0     (0b00U << 0) /* Power State D0, R/W */
+#define B57XX_POWER_MANAGEMENT_STATE_D1     (0b01U << 0) /* Power State D1, R/W */
+#define B57XX_POWER_MANAGEMENT_STATE_D2     (0b10U << 0) /* Power State D2, R/W */
+#define B57XX_POWER_MANAGEMENT_STATE_D3     (0b11U << 0) /* Power State D3, R/W */
+#define B57XX_POWER_MANAGEMENT_PMEENABLE    BIT(8)       /* PME Enable, R/O */
+#define B57XX_POWER_MANAGEMENT_PMESTATUS    BIT(15)      /* PME Status, R/W2C */
 
 /* B57XX_HW_FIX */
 #define B57XX_HW_FIX_HWFIX1     BIT(10) /* HW Fix 1, R/W */
@@ -505,9 +505,9 @@ typedef enum _B57XX_DEVICE_ID
 #define B57XX_MISC_HOST_CTRL_TAGGEDSTATUS   BIT(9)  /* Tagged Status, R/W for supported devices */
 
 /* B57XX_REG_DMA_CTRL */
-#define B57XX_DMA_CTRL_DPWB_64  (0b00 << 29)    /* Df PCI Wr Cmd bnd: 64 bytes, R/W for s. dev. */
-#define B57XX_DMA_CTRL_DPWB_128 (0b01 << 29)    /* Df PCI Wr Cmd bnd: 128 bytes, R/W for s. dev. */
-#define B57XX_DMA_CTRL_DPWB_NOC (0b10 << 29)    /* Df PCI Wr Cmd bnd: No bound, R/W for s. dev. */
+#define B57XX_DMA_CTRL_DPWB_64  (0b00U << 29)    /* Df PCI Wr Cmd bnd: 64 bytes, R/W for s. dev. */
+#define B57XX_DMA_CTRL_DPWB_128 (0b01U << 29)    /* Df PCI Wr Cmd bnd: 128 bytes, R/W for s. dev. */
+#define B57XX_DMA_CTRL_DPWB_NOC (0b10U << 29)    /* Df PCI Wr Cmd bnd: No bound, R/W for s. dev. */
 
 /* B57XX_PCI_STATE */
 #define B57XX_PCI_STATE_FORCERESET  BIT(0)  /* Force PCI Reset, R/O */
@@ -521,31 +521,31 @@ typedef enum _B57XX_DEVICE_ID
 #define B57XX_PCI_CLOCK_ALTCLOCK        BIT(12) /* Select Alt Clock, R/W */
 
 /* B57XX_ETH_MAC_MODE */
-#define B57XX_ETH_MAC_MODE_RESET        BIT(0)      /* Global Reset, R/W */
-#define B57XX_ETH_MAC_MODE_HALFDUPLEX   BIT(1)      /* Half-duplex, R/W */
-#define B57XX_MASK_ETH_MAC_MODE_PORT    (0b11 << 2) /* Port mode */
-#define B57XX_ETH_MAC_MODE_PORT_NONE    (0b00 << 2) /* Port mode: None, R/W */
-#define B57XX_ETH_MAC_MODE_PORT_MII     (0b01 << 2) /* Port mode: MII, R/W */
-#define B57XX_ETH_MAC_MODE_PORT_GMI     (0b10 << 2) /* Port mode: GMI, R/W */
-#define B57XX_ETH_MAC_MODE_PORT_TBI     (0b11 << 2) /* Port mode: Ten bit interface, R/W */
-#define B57XX_ETH_MAC_MODE_LOOPBACK     BIT(4)      /* Loopback Mode, R/W */
-#define B57XX_ETH_MAC_MODE_TAGGED       BIT(7)      /* Tagged MAC Control, R/W */
-#define B57XX_ETH_MAC_MODE_TXBURST      BIT(8)      /* Enable TX Bursting, R/W */
-#define B57XX_ETH_MAC_MODE_MAXDEFER     BIT(9)      /* Max Deferral checking statistic, R/W */
-#define B57XX_ETH_MAC_MODE_LINKPOLARITY BIT(10)     /* Link polarity, R/W for supported devices */
-#define B57XX_ETH_MAC_MODE_RXSTATENABLE BIT(11)     /* Enable RX Statistics, R/W */
-#define B57XX_ETH_MAC_MODE_RXSTATCLEAR  BIT(12)     /* Clear RX Statistics, R/W */
-#define B57XX_ETH_MAC_MODE_RXSTATFLUSH  BIT(13)     /* Flush RX Statistics, R/W */
-#define B57XX_ETH_MAC_MODE_TXSTATENABLE BIT(14)     /* Enable TX Statistics, R/W */
-#define B57XX_ETH_MAC_MODE_TXSTATCLEAR  BIT(15)     /* Clear TX Statistics, R/W */
-#define B57XX_ETH_MAC_MODE_TXSTATFLUSH  BIT(16)     /* Flush TX Statistics, R/W */
-#define B57XX_ETH_MAC_MODE_SENDCONFIGS  BIT(17)     /* Send Configs, R/W */
-#define B57XX_ETH_MAC_MODE_MAGICDETECT  BIT(18)     /* Magic Packet Detect Enable, R/W */
-#define B57XX_ETH_MAC_MODE_ACPIPOWERON  BIT(19)     /* ACPI Power-on Enable, R/W */
-#define B57XX_ETH_MAC_MODE_MIP          BIT(20)     /* Enable MIP, R/W for supported devices */
-#define B57XX_ETH_MAC_MODE_TXDMA        BIT(21)     /* Enable Transmit DMA engine, R/W */
-#define B57XX_ETH_MAC_MODE_RXDMA        BIT(22)     /* Enable Receive DMA engine, R/W */
-#define B57XX_ETH_MAC_MODE_RXFHDDMA     BIT(23)     /* Enable RX Frame Header DMA engine, R/W */
+#define B57XX_ETH_MAC_MODE_RESET        BIT(0)       /* Global Reset, R/W */
+#define B57XX_ETH_MAC_MODE_HALFDUPLEX   BIT(1)       /* Half-duplex, R/W */
+#define B57XX_MASK_ETH_MAC_MODE_PORT    (0b11U << 2) /* Port mode */
+#define B57XX_ETH_MAC_MODE_PORT_NONE    (0b00U << 2) /* Port mode: None, R/W */
+#define B57XX_ETH_MAC_MODE_PORT_MII     (0b01U << 2) /* Port mode: MII, R/W */
+#define B57XX_ETH_MAC_MODE_PORT_GMI     (0b10U << 2) /* Port mode: GMI, R/W */
+#define B57XX_ETH_MAC_MODE_PORT_TBI     (0b11U << 2) /* Port mode: Ten bit interface, R/W */
+#define B57XX_ETH_MAC_MODE_LOOPBACK     BIT(4)       /* Loopback Mode, R/W */
+#define B57XX_ETH_MAC_MODE_TAGGED       BIT(7)       /* Tagged MAC Control, R/W */
+#define B57XX_ETH_MAC_MODE_TXBURST      BIT(8)       /* Enable TX Bursting, R/W */
+#define B57XX_ETH_MAC_MODE_MAXDEFER     BIT(9)       /* Max Deferral checking statistic, R/W */
+#define B57XX_ETH_MAC_MODE_LINKPOLARITY BIT(10)      /* Link polarity, R/W for supported devices */
+#define B57XX_ETH_MAC_MODE_RXSTATENABLE BIT(11)      /* Enable RX Statistics, R/W */
+#define B57XX_ETH_MAC_MODE_RXSTATCLEAR  BIT(12)      /* Clear RX Statistics, R/W */
+#define B57XX_ETH_MAC_MODE_RXSTATFLUSH  BIT(13)      /* Flush RX Statistics, R/W */
+#define B57XX_ETH_MAC_MODE_TXSTATENABLE BIT(14)      /* Enable TX Statistics, R/W */
+#define B57XX_ETH_MAC_MODE_TXSTATCLEAR  BIT(15)      /* Clear TX Statistics, R/W */
+#define B57XX_ETH_MAC_MODE_TXSTATFLUSH  BIT(16)      /* Flush TX Statistics, R/W */
+#define B57XX_ETH_MAC_MODE_SENDCONFIGS  BIT(17)      /* Send Configs, R/W */
+#define B57XX_ETH_MAC_MODE_MAGICDETECT  BIT(18)      /* Magic Packet Detect Enable, R/W */
+#define B57XX_ETH_MAC_MODE_ACPIPOWERON  BIT(19)      /* ACPI Power-on Enable, R/W */
+#define B57XX_ETH_MAC_MODE_MIP          BIT(20)      /* Enable MIP, R/W for supported devices */
+#define B57XX_ETH_MAC_MODE_TXDMA        BIT(21)      /* Enable Transmit DMA engine, R/W */
+#define B57XX_ETH_MAC_MODE_RXDMA        BIT(22)      /* Enable Receive DMA engine, R/W */
+#define B57XX_ETH_MAC_MODE_RXFHDDMA     BIT(23)      /* Enable RX Frame Header DMA engine, R/W */
 
 /* B57XX_ETH_MAC_STATUS */
 #define B57XX_ETH_MAC_STATUS_CONFIGCHANGED  BIT(3)  /* Config changed, W2C for supported devices */
@@ -602,17 +602,17 @@ typedef enum _B57XX_DEVICE_ID
 #define B57XX_ETH_RX_MODE_EXTHASH       BIT(12) /* Extended Hash Enable, R/W for supported dev. */
 
 /* B57XX_ETH_RX_RULES_CTRL */
-#define B57XX_MASK_ETH_RX_RULES_CTRL_OFFSET     (0xFF << 0)     /* Offset, R/W */
-#define B57XX_MASK_ETH_RX_RULES_CTRL_CLASS      (0x1F << 8)     /* Class, R/W */
-#define B57XX_ETH_RX_RULES_CTRL_HEADER_FRAME    (0b000 << 13)   /* Start of Frame header, R/W */
-#define B57XX_ETH_RX_RULES_CTRL_HEADER_IP       (0b001 << 13)   /* Start of IP Header, R/W */
-#define B57XX_ETH_RX_RULES_CTRL_HEADER_TCP      (0b010 << 13)   /* Start of TCP Header, R/W */
-#define B57XX_ETH_RX_RULES_CTRL_HEADER_UDP      (0b011 << 13)   /* Start of UDP Header, R/W */
-#define B57XX_ETH_RX_RULES_CTRL_HEADER_DATA     (0b100 << 13)   /* Start of Data, R/W */
-#define B57XX_ETH_RX_RULES_CTRL_CMP_EQUAL       (0b00 << 16)    /* Equal compare op., R/W */
-#define B57XX_ETH_RX_RULES_CTRL_CMP_NOTEQUAL    (0b01 << 16)    /* Not equal compare op., R/W */
-#define B57XX_ETH_RX_RULES_CTRL_CMP_GREATER     (0b10 << 16)    /* Greater than compare op, R/W */
-#define B57XX_ETH_RX_RULES_CTRL_CMP_LESS        (0b11 << 16)    /* Less than compare op., R/W */
+#define B57XX_MASK_ETH_RX_RULES_CTRL_OFFSET     (0xFFU << 0)    /* Offset, R/W */
+#define B57XX_MASK_ETH_RX_RULES_CTRL_CLASS      (0x1FU << 8)    /* Class, R/W */
+#define B57XX_ETH_RX_RULES_CTRL_HEADER_FRAME    (0b000U << 13)  /* Start of Frame header, R/W */
+#define B57XX_ETH_RX_RULES_CTRL_HEADER_IP       (0b001U << 13)  /* Start of IP Header, R/W */
+#define B57XX_ETH_RX_RULES_CTRL_HEADER_TCP      (0b010U << 13)  /* Start of TCP Header, R/W */
+#define B57XX_ETH_RX_RULES_CTRL_HEADER_UDP      (0b011U << 13)  /* Start of UDP Header, R/W */
+#define B57XX_ETH_RX_RULES_CTRL_HEADER_DATA     (0b100U << 13)  /* Start of Data, R/W */
+#define B57XX_ETH_RX_RULES_CTRL_CMP_EQUAL       (0b00U << 16)   /* Equal compare op., R/W */
+#define B57XX_ETH_RX_RULES_CTRL_CMP_NOTEQUAL    (0b01U << 16)   /* Not equal compare op., R/W */
+#define B57XX_ETH_RX_RULES_CTRL_CMP_GREATER     (0b10U << 16)   /* Greater than compare op, R/W */
+#define B57XX_ETH_RX_RULES_CTRL_CMP_LESS        (0b11U << 16)   /* Less than compare op., R/W */
 #define B57XX_ETH_RX_RULES_CTRL_MAP             BIT(24)         /* Map, R/W */
 #define B57XX_ETH_RX_RULES_CTRL_DISCARD         BIT(25)         /* Discard, R/W */
 #define B57XX_ETH_RX_RULES_CTRL_MASK            BIT(26)         /* Mask, R/W */
@@ -623,11 +623,11 @@ typedef enum _B57XX_DEVICE_ID
 #define B57XX_ETH_RX_RULES_CTRL_ENABLE          BIT(31)         /* Enable R/W */
 
 /* B57XX_ETH_RX_RULES_VALUE */
-#define B57XX_MASK_ETH_RX_RULES_VALUE_VALUE (0xffff << 0)   /* Value, R/W */
-#define B57XX_MASK_ETH_RX_RULES_VALUE_MASK  (0xffff << 16)  /* Mask, R/W */
+#define B57XX_MASK_ETH_RX_RULES_VALUE_VALUE (0xffffU << 0)   /* Value, R/W */
+#define B57XX_MASK_ETH_RX_RULES_VALUE_MASK  (0xffffU << 16)  /* Mask, R/W */
 
 /* B57XX_ETH_RX_RULES_CONFIG */
-#define B57XX_MASK_ETH_RX_RULES_CONFIG_NORULECLASS  (0xf << 3)  /* No Rules Matches Default Class */
+#define B57XX_MASK_ETH_RX_RULES_CONFIG_NORULECLASS  (0xfU << 3)  /* No Rules Matches Default Class */
 
 /* B57XX_TX_DATA_MODE */
 #define B57XX_TX_DATA_MODE_RESET    BIT(0)  /* Reset, R/W */
@@ -781,18 +781,18 @@ typedef enum _B57XX_DEVICE_ID
 #define B57XX_MBUF_CLUSTER_FREE_ATTN    BIT(2)  /* Attention Enable, R/W */
 
 /* B57XX_COAL_HOST_MODE */
-#define B57XX_COAL_HOST_MODE_RESET          BIT(0)      /* Reset, R/W */
-#define B57XX_COAL_HOST_MODE_ENABLE         BIT(1)      /* Enable, R/W */
-#define B57XX_COAL_HOST_MODE_ATTN           BIT(2)      /* Attention Enable, R/W */
-#define B57XX_COAL_HOST_MODE_COALNOW        BIT(3)      /* Coalesce Now, R/W */
-#define B57XX_COAL_HOST_MODE_STATUS_SZFULL  (0b00 << 7) /* Full status block, R/W for s. dev. */
-#define B57XX_COAL_HOST_MODE_STATUS_SZ64    (0b01 << 7) /* 64 byte status block, R/W for s. dev. */
-#define B57XX_COAL_HOST_MODE_STATUS_SZ32    (0b10 << 7) /* 32 byte status block, R/W for s. dev. */
-#define B57XX_COAL_HOST_MODE_STATUS_SZUNDEF (0b11 << 7) /* Undefined size, R/W for supported dev. */
-#define B57XX_COAL_HOST_MODE_CLEARTICKRX    BIT(9)      /* Clear Ticks Mode on RX, R/W */
-#define B57XX_COAL_HOST_MODE_CLEARTICKTX    BIT(10)     /* Clear Ticks Mode on TX, R/W */
-#define B57XX_COAL_HOST_MODE_NOINTDMADFORCE BIT(11)     /* No Interrupt on DMAD Force, R/W */
-#define B57XX_COAL_HOST_MODE_NOINTFORCEUPD  BIT(12)     /* No Interrupt on Force Update, R/W */
+#define B57XX_COAL_HOST_MODE_RESET          BIT(0)       /* Reset, R/W */
+#define B57XX_COAL_HOST_MODE_ENABLE         BIT(1)       /* Enable, R/W */
+#define B57XX_COAL_HOST_MODE_ATTN           BIT(2)       /* Attention Enable, R/W */
+#define B57XX_COAL_HOST_MODE_COALNOW        BIT(3)       /* Coalesce Now, R/W */
+#define B57XX_COAL_HOST_MODE_STATUS_SZFULL  (0b00U << 7) /* Full status block, R/W for s. dev. */
+#define B57XX_COAL_HOST_MODE_STATUS_SZ64    (0b01U << 7) /* 64 byte status block, R/W for s. dev. */
+#define B57XX_COAL_HOST_MODE_STATUS_SZ32    (0b10U << 7) /* 32 byte status block, R/W for s. dev. */
+#define B57XX_COAL_HOST_MODE_STATUS_SZUNDEF (0b11U << 7) /* Undefined size, R/W for supported dev. */
+#define B57XX_COAL_HOST_MODE_CLEARTICKRX    BIT(9)       /* Clear Ticks Mode on RX, R/W */
+#define B57XX_COAL_HOST_MODE_CLEARTICKTX    BIT(10)      /* Clear Ticks Mode on TX, R/W */
+#define B57XX_COAL_HOST_MODE_NOINTDMADFORCE BIT(11)      /* No Interrupt on DMAD Force, R/W */
+#define B57XX_COAL_HOST_MODE_NOINTFORCEUPD  BIT(12)      /* No Interrupt on Force Update, R/W */
 
 /* B57XX_MEM_ARB_MODE */
 #define B57XX_MEM_ARB_MODE_RESET    BIT(0)  /* Reset, R/W */
@@ -874,15 +874,15 @@ typedef enum _B57XX_DEVICE_ID
 #define B57XX_PHY_AUX_STATUS_ANPAGERX       BIT(5)          /* Auto-negotiation Page Received */
 #define B57XX_PHY_AUX_STATUS_REMOTEFAULT    BIT(6)          /* Remote Fault */
 #define B57XX_PHY_AUX_STATUS_PARALLELFAULT  BIT(7)          /* Parallel Detection Fault */
-#define B57XX_MASK_PHY_AUX_STATUS_MODE      (0b111 << 8)    /* Status mode */
-#define B57XX_PHY_AUX_STATUS_MODE_NONE      (0b000 << 8)    /* No highest common denominator */
-#define B57XX_PHY_AUX_STATUS_MODE_10TH      (0b001 << 8)    /* 10BASE-T half-duplex */
-#define B57XX_PHY_AUX_STATUS_MODE_10TF      (0b010 << 8)    /* 10BASE-T full-duplex */
-#define B57XX_PHY_AUX_STATUS_MODE_100TXH    (0b011 << 8)    /* 100BASE-TX half-duplex */
-#define B57XX_PHY_AUX_STATUS_MODE_100T4     (0b100 << 8)    /* 100BASE-T4 */
-#define B57XX_PHY_AUX_STATUS_MODE_100TXF    (0b101 << 8)    /* 100BASE-TX full-duplex */
-#define B57XX_PHY_AUX_STATUS_MODE_1000TH    (0b110 << 8)    /* 1000BASE-T half-duplex */
-#define B57XX_PHY_AUX_STATUS_MODE_1000TF    (0b111 << 8)    /* 1000BASE-T full-duplex */
+#define B57XX_MASK_PHY_AUX_STATUS_MODE      (0b111U << 8)   /* Status mode */
+#define B57XX_PHY_AUX_STATUS_MODE_NONE      (0b000U << 8)   /* No highest common denominator */
+#define B57XX_PHY_AUX_STATUS_MODE_10TH      (0b001U << 8)   /* 10BASE-T half-duplex */
+#define B57XX_PHY_AUX_STATUS_MODE_10TF      (0b010U << 8)   /* 10BASE-T full-duplex */
+#define B57XX_PHY_AUX_STATUS_MODE_100TXH    (0b011U << 8)   /* 100BASE-TX half-duplex */
+#define B57XX_PHY_AUX_STATUS_MODE_100T4     (0b100U << 8)   /* 100BASE-T4 */
+#define B57XX_PHY_AUX_STATUS_MODE_100TXF    (0b101U << 8)   /* 100BASE-TX full-duplex */
+#define B57XX_PHY_AUX_STATUS_MODE_1000TH    (0b110U << 8)   /* 1000BASE-T half-duplex */
+#define B57XX_PHY_AUX_STATUS_MODE_1000TF    (0b111U << 8)   /* 1000BASE-T full-duplex */
 #define B57XX_PHY_AUX_STATUS_AUTONEGNPW     BIT(11)         /* Auto-negotiation NextPage Wait */
 #define B57XX_PHY_AUX_STATUS_AUTONEG        BIT(12)         /* Auto-negotiation Ability Detect */
 #define B57XX_PHY_AUX_STATUS_AUTONEGACK     BIT(13)         /* Auto-negotiation Ack Detect */
