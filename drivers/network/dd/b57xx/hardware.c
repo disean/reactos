@@ -860,30 +860,29 @@ NICUpdateLinkStatus(
     _In_ PB57XX_ADAPTER Adapter)
 {
     ULONG Value;
-    USHORT Value16;
 
     B57XXClearMACAttentions(Adapter);
 
     /* PHY Initialization Procedure step 7: Acknowledge outstanding interrupts */
-    B57XXReadAndClearPHYInterrupts(Adapter, &Value16);
+    B57XXReadAndClearPHYInterrupts(Adapter);
 
     /* PHY Initialization Procedure step 9: Configure the Three LINK LED Mode bit (optional) */
 
     /* PHY Initialization Procedure step 10: Determine link status */
-    B57XXReadPHY(Adapter, B57XX_MII_REG_STATUS, &Value16);
-    B57XXReadPHY(Adapter, B57XX_MII_REG_STATUS, &Value16);
+    B57XXReadPHY(Adapter, B57XX_MII_REG_STATUS);
+    B57XXReadPHY(Adapter, B57XX_MII_REG_STATUS);
 
     /* PHY Initialization Procedure step 11-12: Determine speed and duplex operation & store */
     NdisStallExecution(20000);
-    B57XXReadPHY(Adapter, B57XX_MII_REG_AUX_STATUS, &Value16);
-    Adapter->LinkStatus = Value16;
-    if (!(Value16 & B57XX_PHY_AUX_STATUS_LINKSTATUS))
+    Value = B57XXReadPHY(Adapter, B57XX_MII_REG_AUX_STATUS);
+    Adapter->LinkStatus = Value;
+    if (!(Value & B57XX_PHY_AUX_STATUS_LINKSTATUS))
     {
-        NDIS_MinDbgPrint("Link disconnected (0x%x)\n", Value16);
+        NDIS_MinDbgPrint("Link disconnected (0x%lx)\n", Value);
 
-        B57XXReadPHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT, &Value16);
-        Value16 &= ~B57XX_PHY_AUTONEG_PAUSE;
-        B57XXWritePHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT, Value16);
+        Value = B57XXReadPHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT);
+        Value &= ~B57XX_PHY_AUTONEG_PAUSE;
+        B57XXWritePHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT, Value);
 
         B57XXDisableRegInd(Adapter, B57XX_REG_ETH_TX_MODE, B57XX_ETH_TX_MODE_FLOWCTRL);
         B57XXDisableRegInd(Adapter, B57XX_REG_ETH_RX_MODE, B57XX_ETH_RX_MODE_FLOWCTRL);
@@ -894,9 +893,9 @@ NICUpdateLinkStatus(
     }
 
     /* PHY Initialization Procedure step 13: Enable Flow Control */
-    B57XXReadPHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT, &Value16);
-    Value16 |= B57XX_PHY_AUTONEG_PAUSE;
-    B57XXWritePHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT, Value16);
+    Value = B57XXReadPHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT);
+    Value |= B57XX_PHY_AUTONEG_PAUSE;
+    B57XXWritePHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT, Value);
     NICSetupFlowControl(Adapter);
 
     /* PHY Initialization Procedure step 14-16: Configure MAC port mode, duplex, & polarity */
@@ -947,8 +946,8 @@ NICSetupFlowControl(
     _In_ PB57XX_ADAPTER Adapter)
 {
     ULONG Value;
-    USHORT AutonegLocal;
-    USHORT AutonegRemote;
+    ULONG AutonegLocal;
+    ULONG AutonegRemote;
     BOOLEAN FlowControlTX = FALSE;
     BOOLEAN FlowControlRX = FALSE;
 
@@ -966,8 +965,8 @@ NICSetupFlowControl(
         goto Finish;
     }
 
-    B57XXReadPHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT, &AutonegLocal);
-    B57XXReadPHY(Adapter, B57XX_MII_REG_AUTONEG_PARTNER, &AutonegRemote);
+    AutonegLocal = B57XXReadPHY(Adapter, B57XX_MII_REG_AUTONEG_ADVERT);
+    AutonegRemote = B57XXReadPHY(Adapter, B57XX_MII_REG_AUTONEG_PARTNER);
 
     if ((AutonegLocal & B57XX_PHY_AUTONEG_PAUSE) && (AutonegLocal & B57XX_PHY_AUTONEG_ASYMPAUSE))
     {
@@ -1334,11 +1333,10 @@ B57XXWriteMemoryRCB(
     B57XXWritePciConfig32(Adapter, B57XX_REG_MEM_BASE, 0);
 }
 
-NDIS_STATUS
+ULONG
 B57XXReadPHY(
     _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG PHYRegOffset,
-    _Out_ PUSHORT pValue)
+    _In_ ULONG PHYRegOffset)
 {
     const ULONG PHYAddress = 0x01;
     ULONG Value32;
@@ -1362,15 +1360,13 @@ B57XXReadPHY(
     if (Value32 & B57XX_ETH_MI_COMMUNICATION_START)
     {
         NDIS_MinDbgPrint("Unable to read to PHY, timed out (0x%lx)\n", Value32);
-        return NDIS_STATUS_FAILURE;
+        return MII_FLAG_FAILED;
     }
 
-    *pValue = Value32 & 0xFFFF;
-
-    return NDIS_STATUS_SUCCESS;
+    return Value32 & 0xFFFF;
 }
 
-NDIS_STATUS
+ULONG
 B57XXWritePHY(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG PHYRegOffset,
@@ -1399,10 +1395,10 @@ B57XXWritePHY(
     if (Value32 & B57XX_ETH_MI_COMMUNICATION_START)
     {
         NDIS_MinDbgPrint("Unable to write to PHY, timed out (0x%lx)\n", Value32);
-        return NDIS_STATUS_FAILURE;
+        return MII_FLAG_FAILED;
     }
 
-    return NDIS_STATUS_SUCCESS;
+    return 0;
 }
 
 VOID
@@ -1418,14 +1414,11 @@ B57XXClearMACAttentions(
 
 VOID
 B57XXReadAndClearPHYInterrupts(
-    _In_ PB57XX_ADAPTER Adapter,
-    _Out_ PUSHORT Interrupts)
+    _In_ PB57XX_ADAPTER Adapter)
 {
-    USHORT Dummy;
-
-    B57XXReadPHY(Adapter, B57XX_MII_REG_INT_STATUS, Interrupts);
+    B57XXReadPHY(Adapter, B57XX_MII_REG_INT_STATUS);
     // Read again to clear
-    B57XXReadPHY(Adapter, B57XX_MII_REG_INT_STATUS, &Dummy);
+    B57XXReadPHY(Adapter, B57XX_MII_REG_INT_STATUS);
 }
 
 VOID

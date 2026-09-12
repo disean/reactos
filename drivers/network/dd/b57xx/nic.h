@@ -19,6 +19,9 @@
 #define PAYLOAD_SIZE_STANDARD   1500
 #define PAYLOAD_SIZE_JUMBO      9000
 
+#define MII_FLAG_FAILED     0x80000000
+#define MII_SUCCESS(Status) (((Status) & MII_FLAG_FAILED) == 0)
+
 typedef UCHAR MAC_ADDRESS[ETH_LENGTH_OF_ADDRESS], *PMAC_ADDRESS;
 
 #include <pshpack1.h>
@@ -529,13 +532,12 @@ B57XXWriteMemoryRCB(
     _In_ ULONG Address,
     _In_ volatile PB57XX_RING_CONTROL_BLOCK pRCB);
 
-NDIS_STATUS
+ULONG
 B57XXReadPHY(
     _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG PHYRegOffset,
-    _Out_ PUSHORT pValue);
+    _In_ ULONG PHYRegOffset);
 
-NDIS_STATUS
+ULONG
 B57XXWritePHY(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG PHYRegOffset,
@@ -543,8 +545,7 @@ B57XXWritePHY(
 
 VOID
 B57XXReadAndClearPHYInterrupts(
-    _In_ PB57XX_ADAPTER Adapter,
-    _Out_ PUSHORT Interrupts);
+    _In_ PB57XX_ADAPTER Adapter);
 
 VOID
 B57XXClearMACAttentions(
