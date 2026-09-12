@@ -14,49 +14,6 @@ ULONG DebugTraceLevel = MIN_TRACE;
 
 static
 NDIS_STATUS
-InitAdapterResources(
-    _In_ PB57XX_ADAPTER Adapter,
-    _In_ PNDIS_RESOURCE_LIST ResourceList)
-{
-    for (UINT n = 0; n < ResourceList->Count; n++)
-    {
-        PCM_PARTIAL_RESOURCE_DESCRIPTOR ResourceDescriptor = ResourceList->PartialDescriptors + n;
-
-        switch (ResourceDescriptor->Type)
-        {
-            case CmResourceTypeInterrupt:
-                ASSERT(Adapter->Interrupt.Vector == 0);
-                ASSERT(Adapter->Interrupt.Level == 0);
-
-                Adapter->Interrupt.Vector = ResourceDescriptor->u.Interrupt.Vector;
-                Adapter->Interrupt.Level = ResourceDescriptor->u.Interrupt.Level;
-                Adapter->Interrupt.Shared = (ResourceDescriptor->ShareDisposition ==
-                                           CmResourceShareShared);
-                Adapter->Interrupt.Flags = ResourceDescriptor->Flags;
-                break;
-            case CmResourceTypeMemory:
-                ASSERT(Adapter->IoAddress.LowPart == 0);
-
-                Adapter->IoAddress.QuadPart = ResourceDescriptor->u.Memory.Start.QuadPart;
-                Adapter->IoLength = ResourceDescriptor->u.Memory.Length;
-                break;
-
-            default:
-                break;
-        }
-    }
-
-    if (Adapter->IoAddress.QuadPart == 0 || Adapter->Interrupt.Vector == 0)
-    {
-        NDIS_MinDbgPrint("Adapter didn't receive enough resources\n");
-        return NDIS_STATUS_RESOURCES;
-    }
-
-    return NDIS_STATUS_SUCCESS;
-}
-
-static
-NDIS_STATUS
 InitAllocateSharedMemory(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Length,
@@ -101,6 +58,100 @@ FreeSharedMemory(
     return NDIS_STATUS_SUCCESS;
 }
 
+static
+NDIS_STATUS
+InitializeAdapterResources(
+    _In_ PB57XX_ADAPTER Adapter,
+    _In_ NDIS_HANDLE WrapperConfigurationContext)
+{
+    NDIS_STATUS Status;
+    PNDIS_RESOURCE_LIST AssignedResources = NULL;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR IoDescriptor = NULL;
+    PCM_PARTIAL_RESOURCE_DESCRIPTOR InterruptDescriptor = NULL;
+    UINT i, ResourceListSize = 0;
+
+    NdisMQueryAdapterResources(&Status,
+                               WrapperConfigurationContext,
+                               AssignedResources,
+                               &ResourceListSize);
+    if (Status != NDIS_STATUS_RESOURCES)
+        return NDIS_STATUS_FAILURE;
+
+    Status = NdisAllocateMemoryWithTag((PVOID*)&AssignedResources, ResourceListSize, B57XX_TAG);
+    if (Status != NDIS_STATUS_SUCCESS)
+        return Status;
+
+    NdisMQueryAdapterResources(&Status,
+                               WrapperConfigurationContext,
+                               AssignedResources,
+                               &ResourceListSize);
+    if (Status != NDIS_STATUS_SUCCESS)
+        goto Cleanup;
+
+    for (i = 0; i < AssignedResources->Count; ++i)
+    {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR Descriptor;
+
+        Descriptor = &AssignedResources->PartialDescriptors[i];
+        switch (Descriptor->Type)
+        {
+            case CmResourceTypeMemory:
+            {
+                if (!IoDescriptor)
+                    IoDescriptor = Descriptor;
+                break;
+            }
+
+            case CmResourceTypeInterrupt:
+            {
+                if (!InterruptDescriptor)
+                    InterruptDescriptor = Descriptor;
+                break;
+            }
+
+            default:
+                break;
+        }
+    }
+
+    if (!IoDescriptor || !InterruptDescriptor)
+    {
+        NDIS_MinDbgPrint("Adapter didn't receive enough resources\n");
+        Status = NDIS_STATUS_RESOURCES;
+        goto Cleanup;
+    }
+
+    Adapter->IoLength = IoDescriptor->u.Memory.Length;
+
+    Adapter->Interrupt.Vector = InterruptDescriptor->u.Interrupt.Vector;
+    Adapter->Interrupt.Level = InterruptDescriptor->u.Interrupt.Level;
+    Adapter->Interrupt.Flags = InterruptDescriptor->Flags;
+    Adapter->Interrupt.Shared = (InterruptDescriptor->ShareDisposition == CmResourceShareShared);
+
+    Status = NdisMMapIoSpace((PVOID*)&Adapter->IoBase,
+                             Adapter->MiniportAdapterHandle,
+                             IoDescriptor->u.Memory.Start,
+                             Adapter->IoLength);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        NDIS_MinDbgPrint("Unable to map IO memory (0x%lx)\n", (ULONG)Status);
+        goto Cleanup;
+    }
+
+    NDIS_MinDbgPrint("IO Base %p\n", Adapter->IoBase);
+    NDIS_MinDbgPrint("IRQ Level %lu, Vector %lu\n",
+                     Adapter->Interrupt.Level,
+                     Adapter->Interrupt.Vector);
+    NDIS_MinDbgPrint("IRQ ShareDisposition %u, InterruptFlags %lx\n",
+                     InterruptDescriptor->ShareDisposition,
+                     InterruptDescriptor->Flags);
+
+Cleanup:
+    NdisFreeMemory(AssignedResources, ResourceListSize, 0);
+
+    return Status;
+}
+
 NDIS_STATUS
 NTAPI
 MiniportInitialize(
@@ -115,8 +166,6 @@ MiniportInitialize(
     NDIS_STATUS Status;
     PCI_COMMON_CONFIG PCIConfig;
     UINT i;
-    PNDIS_RESOURCE_LIST ResourceList = NULL;
-    UINT ResourceListSize = 0;
 
     UNREFERENCED_PARAMETER(OpenErrorStatus);
 
@@ -170,63 +219,16 @@ MiniportInitialize(
     Adapter->PciState.SubVendorID = PCIConfig.u.type0.SubVendorID;
     Adapter->PciState.SubSystemID = PCIConfig.u.type0.SubSystemID;
 
-    /* Get our resources for IRQ and IO base information */
-    NdisMQueryAdapterResources(&Status,
-                               WrapperConfigurationContext,
-                               ResourceList,
-                               &ResourceListSize);
-    if (Status != NDIS_STATUS_RESOURCES)
-    {
-        NDIS_MinDbgPrint("Unexpected failure of NdisMQueryAdapterResources (0x%x)\n", Status);
-        Status = NDIS_STATUS_FAILURE;
-        goto Cleanup;
-    }
-
-    Status = NdisAllocateMemoryWithTag((PVOID*)&ResourceList, ResourceListSize, B57XX_TAG);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_MinDbgPrint("Failed to allocate resource list (0x%x)\n", Status);
-        goto Cleanup;
-    }
-
-    NdisMQueryAdapterResources(&Status,
-                               WrapperConfigurationContext,
-                               ResourceList,
-                               &ResourceListSize);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_MinDbgPrint("Unexpected failure of NdisMQueryAdapterResources (0x%x)\n", Status);
-        goto Cleanup;
-    }
-
-    ASSERT(ResourceList->Version == 1);
-    ASSERT(ResourceList->Revision == 1);
-
-    /* Begin hardware initialization */
-    Status = InitAdapterResources(Adapter, ResourceList);
+    Status = InitializeAdapterResources(Adapter, WrapperConfigurationContext);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         goto Cleanup;
     }
-
-    NdisFreeMemory(ResourceList, ResourceListSize, 0);
-    ResourceList = NULL;
 
     Status = NICConfigureAdapter(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         goto Cleanup;
-    }
-
-    /* Map physical IO address */
-    Status = NdisMMapIoSpace((PVOID*)&Adapter->IoBase,
-                             Adapter->MiniportAdapterHandle,
-                             Adapter->IoAddress,
-                             Adapter->IoLength);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_MinDbgPrint("Unable to map IO memory (0x%x)\n", Status);
-        return Status;
     }
 
     /* Allocate the DMA resources */
@@ -371,11 +373,6 @@ MiniportInitialize(
     return NDIS_STATUS_SUCCESS;
 
 Cleanup:
-    if (ResourceList != NULL)
-    {
-        NdisFreeMemory(ResourceList, ResourceListSize, 0);
-    }
-
     MiniportHalt(Adapter);
 
     return Status;

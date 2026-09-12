@@ -73,7 +73,6 @@ typedef struct _B57XX_ADAPTER
     NDIS_HANDLE MiniportAdapterHandle;
     NDIS_HARDWARE_STATUS HardwareStatus;
     volatile PUCHAR IoBase;
-    NDIS_PHYSICAL_ADDRESS IoAddress;
     ULONG IoLength;
 
     B57XX_DEVICE_ID DeviceID;
