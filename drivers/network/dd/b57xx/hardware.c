@@ -53,25 +53,9 @@ static const struct _B57XX_DEVICE
 
 /* NIC FUNCTIONS **********************************************************************************/
 
-BOOLEAN
-NICIsDevice(
-    _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG DeviceIDListLength,
-    _In_reads_(DeviceIDListLength) const B57XX_DEVICE_ID DeviceIDList[])
-{
-    for (UINT i = 0; i < DeviceIDListLength; i++)
-    {
-        if (DeviceIDList[i] == Adapter->DeviceID)
-        {
-            return TRUE;
-        }
-    }
-    return FALSE;
-}
-
 _Check_return_
 NDIS_STATUS
-NICConfigureAdapter(
+NICRecognizeHardware(
     _In_ PB57XX_ADAPTER Adapter)
 {
     UINT i;
@@ -79,6 +63,12 @@ NICConfigureAdapter(
     ULONG Alignment;
 
     ASSERT(Adapter->PciState.DeviceID != 0);
+
+    if (Adapter->PciState.VendorID != B57XX_VENDORID_BROADCOM)
+    {
+        NDIS_MinDbgPrint("Could not identify device\n");
+        return NDIS_STATUS_NOT_RECOGNIZED;
+    }
 
     for (i = 0; i < RTL_NUMBER_OF(Devices); i++)
     {
@@ -95,12 +85,26 @@ NICConfigureAdapter(
     if (i == RTL_NUMBER_OF(Devices))
     {
         NDIS_MinDbgPrint("Could not identify device\n");
-        return NDIS_STATUS_FAILURE;
+        return NDIS_STATUS_NOT_RECOGNIZED;
     }
 
-    Adapter->B5705Plus = !NICISDEVICE(Adapter, B5700, B5701, B5702, B5703C, B5703S, B5704C, B5704S);
-    Adapter->B5721Plus = Adapter->B5705Plus && !NICISDEVICE(Adapter, B5705, B5705M, B5788);
-    Adapter->IsSerDes = NICISDEVICE(Adapter, B5703S, B5704S, B5714S, B5715S);
+    Adapter->B5705Plus = Adapter->DeviceID != B5700 &&
+                         Adapter->DeviceID != B5701 &&
+                         Adapter->DeviceID != B5702 &&
+                         Adapter->DeviceID != B5703C &&
+                         Adapter->DeviceID != B5703S &&
+                         Adapter->DeviceID != B5704C &&
+                         Adapter->DeviceID != B5704S;
+
+    Adapter->B5721Plus = Adapter->B5705Plus &&
+                         Adapter->DeviceID != B5705 &&
+                         Adapter->DeviceID != B5705M &&
+                         Adapter->DeviceID != B5788;
+
+    Adapter->IsSerDes = Adapter->DeviceID == B5703S ||
+                        Adapter->DeviceID == B5704S ||
+                        Adapter->DeviceID == B5714S ||
+                        Adapter->DeviceID == B5715S;
 
     Alignment = Adapter->PciState.CacheLineSize;
     Alignment = ALIGN_UP_BY(Alignment, 8);
@@ -109,12 +113,11 @@ NICConfigureAdapter(
     Adapter->MaxFrameSize = PAYLOAD_SIZE_STANDARD + AdditionalFrameSize;
 
     Adapter->StandardProducer.FrameBufferLength = ALIGN_UP_BY(Adapter->MaxFrameSize, Alignment);
-    Adapter->StandardProducer.Count = NICISDEVICE(Adapter, B5705) ? 512 : NUM_RX_BUFFER_DESCRIPTORS;
+    Adapter->StandardProducer.Count = Adapter->DeviceID == B5705 ? 512 : NUM_RX_BUFFER_DESCRIPTORS;
     Adapter->StandardProducer.Index = Adapter->StandardProducer.Count - 1;
 
     /* Receive consumer rings */
-    Adapter->ReturnConsumer[0].Count = NICISDEVICE(Adapter, B5705) ?
-                                       512 : NUM_RX_RETURN_DESCRIPTORS;
+    Adapter->ReturnConsumer[0].Count = Adapter->DeviceID == B5705 ? 512 : NUM_RX_RETURN_DESCRIPTORS;
 
     /* Send producer rings */
     Adapter->SendProducer[0].Count = NUM_TX_BUFFER_DESCRIPTORS;
@@ -140,7 +143,7 @@ NICPowerOn(
     /* Initialization Procedure step 3 should be done already (Save select PCI registers) */
 
     /* Initialization Procedure step 4: Acquire the NVRAM lock */
-    if (!NICISDEVICE(Adapter, B5700, B5701))
+    if (Adapter->DeviceID != B5700 && Adapter->DeviceID != B5701)
     {
         B57XXEnableReg(Adapter, B57XX_REG_SOFT_ARB, B57XX_SOFT_ARB_REQSET1);
         for (n = 0; n < MAX_ATTEMPTS; n++)
@@ -204,13 +207,17 @@ NICSoftReset(
     /* Initialization Procedure step 6: Prepare firmware for reset */
     B57XXWriteMemInd(Adapter, B57XX_ADDR_FW_MAILBOX, B57XX_CONST_T3_MAGIC_NUMBER);
 
-    if (NICISDEVICE(Adapter, B5752))
+    if (Adapter->DeviceID == B5752)
     {
         B57XXWriteReg(Adapter, B57XX_REG_FASTBOOT_COUNTER, 0);
     }
 
     /* Initialization Procedure step 7: Reset the core clocks */
-    if (NICISDEVICE(Adapter, B5751, B5751M, B5721, B5752, B5752M))
+    if (Adapter->DeviceID == B5751 ||
+        Adapter->DeviceID == B5751M ||
+        Adapter->DeviceID == B5721 ||
+        Adapter->DeviceID == B5752 ||
+        Adapter->DeviceID == B5752M)
     {
         B57XXEnableReg(Adapter,
                        B57XX_REG_PCI_CLOCK,
@@ -248,7 +255,7 @@ NICSoftReset(
     B57XXEnableReg(Adapter, B57XX_REG_MEM_ARB_MODE, B57XX_MEM_ARB_MODE_ENABLE);
 
     /* Initialization Procedure step 13: Enable External Memory */
-    if (NICISDEVICE(Adapter, B5700))
+    if (Adapter->DeviceID == B5700)
     {
         // TODO B5700 External memory config
         // If you have one of these, please let me know
@@ -337,15 +344,18 @@ NICSoftReset(
 
     /* Initialization Procedure step 27: Set the default PCI Command Encoding R/W Transactions */
     Value = B57XXReadRegInd(Adapter, B57XX_REG_PCI_STATE);
-    if (NICISDEVICE(Adapter, B5700, B5701))
+    if (Adapter->DeviceID == B5700 || Adapter->DeviceID == B5701)
     {
         Value = (Value & B57XX_PCI_STATE_BUSMODE) ? 0x761B000F : 0x763F000F;
     }
-    else if (NICISDEVICE(Adapter, B5702))
+    else if (Adapter->DeviceID == B5702)
     {
         Value = 0x763F000F;
     }
-    else if (NICISDEVICE(Adapter, B5703C, B5703S, B5704C, B5704S))
+    else if (Adapter->DeviceID == B5703C ||
+             Adapter->DeviceID == B5703S ||
+             Adapter->DeviceID == B5704C ||
+             Adapter->DeviceID == B5704S)
     {
         if (Value & B57XX_PCI_STATE_BUSMODE)
         {
@@ -353,11 +363,16 @@ NICSoftReset(
         }
         Value = 0x763F0000;
     }
-    else if (NICISDEVICE(Adapter, B5705, B5705M, B5788))
+    else if (Adapter->DeviceID == B5705 ||
+             Adapter->DeviceID == B5705M ||
+             Adapter->DeviceID == B5788)
     {
         Value = 0x763F0000;
     }
-    else if (NICISDEVICE(Adapter, B5714C, B5714S, B5715C, B5715S))
+    else if (Adapter->DeviceID == B5714C ||
+             Adapter->DeviceID == B5714S ||
+             Adapter->DeviceID == B5715C ||
+             Adapter->DeviceID == B5715S)
     {
         Value = 0x76144000;
     }
@@ -385,18 +400,21 @@ NICSoftReset(
     B57XXWriteRegInd(Adapter, B57XX_REG_MISC_CONFIG, Value);
 
     /* Initialization Procedure step 33: MAC local memory pool */
-    if (NICISDEVICE(Adapter, B5700))
+    if (Adapter->DeviceID == B5700)
     {
         B57XXEnableRegInd(Adapter, B57XX_REG_MISC_LOCAL_CTRL, B57XX_MISC_LOCAL_CTRL_EXTMEM);
         B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x20000);
         B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0); // FIXME for B5700
     }
-    if (NICISDEVICE(Adapter, B5701, B5702, B5703C, B5703S))
+    if (Adapter->DeviceID == B5701 ||
+        Adapter->DeviceID == B5702 ||
+        Adapter->DeviceID == B5703C ||
+        Adapter->DeviceID == B5703S)
     {
         B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x8000);
         B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0x18000);
     }
-    else if (NICISDEVICE(Adapter, B5704C, B5704S))
+    else if (Adapter->DeviceID == B5704C || Adapter->DeviceID == B5704S)
     {
         B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_BASE, 0x10000);
         B57XXWriteRegInd(Adapter, B57XX_REG_MBUF_POOL_LENGTH, 0x10000);
@@ -490,7 +508,7 @@ NICSoftReset(
     }
 
     /* Initialization Procedure step 43: Mini Receive Buffer Ring (disable) */
-    if (NICISDEVICE(Adapter, B5700))
+    if (Adapter->DeviceID == B5700)
     {
         Adapter->MiniProducer.RingControlBlock.Flags = B57XX_RCB_FLAG_RING_DISABLED;
         Adapter->MiniProducer.RingControlBlock.NICRingAddress = B57XX_ADDR_RECEIVE_MINI_RINGS;
@@ -689,7 +707,7 @@ NICSoftReset(
 
     /* Initialization Procedure step 79: Configure General Miscellaneous Local Control */
     Value = B57XX_MISC_LOCAL_CTRL_INTATTN | B57XX_MISC_LOCAL_CTRL_SEEPROM;
-    if (NICISDEVICE(Adapter, B5752))
+    if (Adapter->DeviceID == B5752)
     {
         Value |= B57XX_MISC_LOCAL_CTRL_GPIOO3;
     }

@@ -145,7 +145,7 @@ C_ASSERT(sizeof(B57XX_STATISTICS_BLOCK) == 2048);
 typedef enum _B57XX_DEVICE_ID
 {
     // Programmer's Guide: BCM57XX
-    B5700,
+    B5700 = 0,
     B5701,
     B5702,
     B5703C,
@@ -423,6 +423,9 @@ typedef enum _B57XX_DEVICE_ID
 #define B57XX_MBOX_TXP_HOST_RING_INDEX4 0x318
 #define B57XX_MBOX_TXP_HOST_RING_INDEX4 0x318
 #define B57XX_MBOX_TXP_NIC_RING_INDEX1  0x380
+
+/* B57XX_REG_VENDORID */
+#define B57XX_VENDORID_BROADCOM     0x14E4
 
 /* B57XX_COMMAND */
 #define B57XX_COMMAND_MEMSPACE      BIT(1)  /* Memory Space, R/W */

@@ -245,7 +245,7 @@ MiniportInitialize(
         goto Cleanup;
     }
 
-    Status = NICConfigureAdapter(Adapter);
+    Status = NICRecognizeHardware(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
         goto Cleanup;

@@ -218,20 +218,9 @@ MiniportHandleInterrupt(
 
 /* NIC FUNCTIONS **********************************************************************************/
 
-#define NICISDEVICE(Adapter, ...)                                                                  \
-    NICIsDevice(Adapter,                                                                           \
-                sizeof((B57XX_DEVICE_ID[]){__VA_ARGS__})/sizeof(B57XX_DEVICE_ID),                  \
-                (B57XX_DEVICE_ID[]){__VA_ARGS__})
-
-BOOLEAN
-NICIsDevice(
-    _In_ PB57XX_ADAPTER Adapter,
-    _In_ ULONG DeviceIDListLength,
-    _In_reads_(DeviceIDListLength) const B57XX_DEVICE_ID DeviceIDList[]);
-
 _Check_return_
 NDIS_STATUS
-NICConfigureAdapter(
+NICRecognizeHardware(
     _In_ PB57XX_ADAPTER Adapter);
 
 _Check_return_
