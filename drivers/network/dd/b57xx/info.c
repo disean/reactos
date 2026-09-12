@@ -239,12 +239,12 @@ MiniportQueryInformation(
             if (InformationBufferLength >= sizeof(ULONG64))
             {
                 *BytesWritten = sizeof(ULONG64);
-                NdisMoveMemory(InformationBuffer, CopySource, sizeof(ULONG64));
+                RtlCopyMemory(InformationBuffer, CopySource, sizeof(ULONG64));
             }
             else if (InformationBufferLength >= sizeof(ULONG))
             {
                 *BytesWritten = sizeof(ULONG);
-                NdisMoveMemory(InformationBuffer, CopySource, sizeof(ULONG));
+                RtlCopyMemory(InformationBuffer, CopySource, sizeof(ULONG));
             }
             else
             {
@@ -271,7 +271,7 @@ MiniportQueryInformation(
         }
         else
         {
-            NdisMoveMemory(InformationBuffer, CopySource, CopyLength);
+            RtlCopyMemory(InformationBuffer, CopySource, CopyLength);
             *BytesWritten = CopyLength;
             *BytesNeeded = CopyLength;
         }
@@ -317,7 +317,7 @@ MiniportSetInformation(
                 break;
             }
 
-            NdisMoveMemory(&GenericULong, InformationBuffer, sizeof(ULONG));
+            RtlCopyMemory(&GenericULong, InformationBuffer, sizeof(ULONG));
 
             if (GenericULong &
                 ~(NDIS_PACKET_TYPE_DIRECTED |
@@ -357,7 +357,7 @@ MiniportSetInformation(
                 break;
             }
 
-            NdisMoveMemory(&GenericULong, InformationBuffer, sizeof(ULONG));
+            RtlCopyMemory(&GenericULong, InformationBuffer, sizeof(ULONG));
 
             if (GenericULong > Adapter->MaxFrameSize - sizeof(ETH_HEADER))
             {
@@ -384,7 +384,7 @@ MiniportSetInformation(
                 break;
             }
 
-            NdisMoveMemory(Adapter->MulticastList, InformationBuffer, InformationBufferLength);
+            RtlCopyMemory(Adapter->MulticastList, InformationBuffer, InformationBufferLength);
 
             Adapter->MulticastListSize = InformationBufferLength / IEEE_802_ADDR_LENGTH;
 

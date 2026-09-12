@@ -542,7 +542,7 @@ NICSoftReset(
 
     if (!Adapter->B5705Plus)
     {
-        NdisZeroMemory(&RCBValue, sizeof(B57XX_RING_CONTROL_BLOCK));
+        RtlZeroMemory(&RCBValue, sizeof(RCBValue));
         RCBValue.Flags = B57XX_RCB_FLAG_RING_DISABLED;
         for (n = 1; n < 4; n++)
         {
@@ -563,7 +563,7 @@ NICSoftReset(
 
     if (!Adapter->B5705Plus)
     {
-        NdisZeroMemory(&RCBValue, sizeof(B57XX_RING_CONTROL_BLOCK));
+        RtlZeroMemory(&RCBValue, sizeof(RCBValue));
         RCBValue.Flags = B57XX_RCB_FLAG_RING_DISABLED;
         for (n = 1; n < 16; n++)
         {

@@ -71,7 +71,7 @@ InitAllocateSharedMemory(
         return NDIS_STATUS_RESOURCES;
     }
 
-    NdisZeroMemory(*pVirtualAddress, Length);
+    RtlZeroMemory(*pVirtualAddress, Length);
 
     B57XXConvertAddress(pPhysicalAddress, &Tmp);
 
@@ -143,7 +143,7 @@ MiniportInitialize(
         return NDIS_STATUS_RESOURCES;
     }
 
-    NdisZeroMemory(Adapter, sizeof(*Adapter));
+    RtlZeroMemory(Adapter, sizeof(*Adapter));
     Adapter->MiniportAdapterHandle = MiniportAdapterHandle;
     Adapter->HardwareStatus = NdisHardwareStatusNotReady;
     NdisAllocateSpinLock(&Adapter->Interrupt.Lock);
@@ -267,9 +267,9 @@ MiniportInitialize(
     {
         if (i != 0)
         {
-            NdisMoveMemory(&Adapter->StandardProducer.pRing[i].HostAddress,
-                           &Adapter->StandardProducer.pRing[0].HostAddress,
-                           sizeof(B57XX_PHYSICAL_ADDRESS));
+            RtlCopyMemory(&Adapter->StandardProducer.pRing[i].HostAddress,
+                          &Adapter->StandardProducer.pRing[0].HostAddress,
+                          sizeof(B57XX_PHYSICAL_ADDRESS));
             B57XXAccumulateAddress(&Adapter->StandardProducer.pRing[i].HostAddress,
                                    i * Adapter->StandardProducer.FrameBufferLength);
         }
@@ -310,8 +310,8 @@ MiniportInitialize(
         NDIS_MinDbgPrint("Unable to allocate transmit packet pointer list\n");
         goto Cleanup;
     }
-    NdisZeroMemory(Adapter->SendProducer[0].pPacketList,
-                   sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count);
+    RtlZeroMemory(Adapter->SendProducer[0].pPacketList,
+                  sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count);
 
     /* Allocate status block */
     NdisMAllocateSharedMemory(Adapter->MiniportAdapterHandle,
@@ -324,7 +324,7 @@ MiniportInitialize(
         NDIS_MinDbgPrint("Unable to allocate status block\n");
         goto Cleanup;
     }
-    NdisZeroMemory(Adapter->Status.pBlock, sizeof(B57XX_STATUS_BLOCK));
+    RtlZeroMemory(Adapter->Status.pBlock, sizeof(B57XX_STATUS_BLOCK));
 
     /* Allocate statistics block */
     if (!Adapter->B5705Plus)
@@ -339,7 +339,7 @@ MiniportInitialize(
             NDIS_MinDbgPrint("Unable to allocate statistics block\n");
             goto Cleanup;
         }
-        NdisZeroMemory(Adapter->Statistics.pBlock, sizeof(B57XX_STATISTICS_BLOCK));
+        RtlZeroMemory(Adapter->Statistics.pBlock, sizeof(B57XX_STATISTICS_BLOCK));
     }
 
     /* Adapter setup */
