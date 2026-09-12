@@ -152,6 +152,34 @@ Cleanup:
     return Status;
 }
 
+static
+NDIS_STATUS
+GetPCIConfiguration(
+    _In_ PB57XX_ADAPTER Adapter)
+{
+    UCHAR Buffer[RTL_SIZEOF_THROUGH_FIELD(PCI_COMMON_CONFIG, u.type0.SubSystemID)];
+    PPCI_COMMON_CONFIG PCIConfig = (PPCI_COMMON_CONFIG)Buffer; // Partial PCI header
+    ULONG BytesRead;
+
+    BytesRead = NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle,
+                                           0,
+                                           FIELD_OFFSET(PCI_COMMON_CONFIG, VendorID),
+                                           Buffer,
+                                           sizeof(Buffer));
+    if (BytesRead != sizeof(Buffer))
+        return NDIS_STATUS_FAILURE;
+
+    Adapter->PciState.VendorID = PCIConfig->VendorID;
+    Adapter->PciState.DeviceID = PCIConfig->DeviceID;
+    Adapter->PciState.Command = PCIConfig->Command;
+    Adapter->PciState.CacheLineSize = PCIConfig->CacheLineSize;
+    Adapter->PciState.RevisionID = PCIConfig->RevisionID;
+    Adapter->PciState.SubVendorID = PCIConfig->u.type0.SubVendorID;
+    Adapter->PciState.SubSystemID = PCIConfig->u.type0.SubSystemID;
+
+    return NDIS_STATUS_SUCCESS;
+}
+
 NDIS_STATUS
 NTAPI
 MiniportInitialize(
@@ -164,7 +192,6 @@ MiniportInitialize(
 {
     PB57XX_ADAPTER Adapter;
     NDIS_STATUS Status;
-    PCI_COMMON_CONFIG PCIConfig;
     UINT i;
 
     UNREFERENCED_PARAMETER(OpenErrorStatus);
@@ -206,18 +233,11 @@ MiniportInitialize(
                          NdisInterfacePci);
 
     /* Get PCI configuration of our NIC */
-    NdisReadPciSlotInformation(Adapter->MiniportAdapterHandle,
-                               0,
-                               FIELD_OFFSET(PCI_COMMON_CONFIG, VendorID),
-                               &PCIConfig,
-                               sizeof(PCIConfig));
-    Adapter->PciState.VendorID = PCIConfig.VendorID;
-    Adapter->PciState.DeviceID = PCIConfig.DeviceID;
-    Adapter->PciState.Command = PCIConfig.Command;
-    Adapter->PciState.CacheLineSize = PCIConfig.CacheLineSize;
-    Adapter->PciState.RevisionID = PCIConfig.RevisionID;
-    Adapter->PciState.SubVendorID = PCIConfig.u.type0.SubVendorID;
-    Adapter->PciState.SubSystemID = PCIConfig.u.type0.SubSystemID;
+    Status = GetPCIConfiguration(Adapter);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        goto Cleanup;
+    }
 
     Status = InitializeAdapterResources(Adapter, WrapperConfigurationContext);
     if (Status != NDIS_STATUS_SUCCESS)

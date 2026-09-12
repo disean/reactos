@@ -85,10 +85,10 @@ typedef struct _B57XX_ADAPTER
         USHORT VendorID;
         USHORT DeviceID;
         USHORT Command;
-        UCHAR CacheLineSize;
         USHORT SubVendorID;
         USHORT SubSystemID;
         UCHAR RevisionID;
+        UCHAR CacheLineSize;
     } PciState;
 
     struct _B57XX_INTERRUPT
