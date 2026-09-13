@@ -552,6 +552,19 @@ MiniportHalt(
     FreeAdapter(Adapter);
 }
 
+static
+VOID
+NTAPI
+MiniportShutdown(
+    _In_ NDIS_HANDLE MiniportAdapterContext)
+{
+    PB57XX_ADAPTER Adapter = MiniportAdapterContext;
+
+    NDIS_MinDbgPrint("B57XX Shutdown\n");
+
+    NICShutdown(Adapter);
+}
+
 NDIS_STATUS
 NTAPI
 MiniportSend(
@@ -640,6 +653,7 @@ DriverEntry(
     Characteristics.ReturnPacketHandler = NULL;
     Characteristics.SendPacketsHandler = NULL;
     Characteristics.AllocateCompleteHandler = NULL;
+    Characteristics.AdapterShutdownHandler = MiniportShutdown;
 
     Status = NdisMRegisterMiniport(WrapperHandle, &Characteristics, sizeof(Characteristics));
     if (Status != NDIS_STATUS_SUCCESS)
