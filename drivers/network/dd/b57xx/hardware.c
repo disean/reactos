@@ -1034,6 +1034,8 @@ NICShutdown(
     }
     Adapter->HardwareStatus = NdisHardwareStatusClosing;
 
+    NICDisableInterrupts(Adapter);
+
     /* Receive path shutdown sequence. */
     B57XXDisableRegInd(Adapter, B57XX_REG_ETH_RX_MODE, B57XX_ETH_RX_MODE_ENABLE);
     B57XXDisableRegInd(Adapter, B57XX_REG_RX_BD_MODE, B57XX_BD_MODE_ENABLE);

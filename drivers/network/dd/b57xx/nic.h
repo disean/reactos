@@ -98,7 +98,6 @@ typedef struct _B57XX_ADAPTER
         BOOLEAN Shared;
         ULONG Flags;
         NDIS_MINIPORT_INTERRUPT Interrupt;
-        BOOLEAN Registered;
         BOOLEAN Pending;
         NDIS_SPIN_LOCK Lock;
     } Interrupt;

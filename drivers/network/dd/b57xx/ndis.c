@@ -36,7 +36,7 @@ InitAllocateSharedMemory(
 }
 
 static
-NDIS_STATUS
+VOID
 FreeSharedMemory(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Length,
@@ -47,15 +47,13 @@ FreeSharedMemory(
 
     if (VirtualAddress == NULL)
     {
-        return NDIS_STATUS_SOFT_ERRORS;
+        return;
     }
 
     Tmp.HighPart = pPhysicalAddress->HighPart;
     Tmp.LowPart = pPhysicalAddress->LowPart;
 
     NdisMFreeSharedMemory(Adapter->MiniportAdapterHandle, Length, FALSE, VirtualAddress, Tmp);
-
-    return NDIS_STATUS_SUCCESS;
 }
 
 static
@@ -327,6 +325,73 @@ GetPCIConfiguration(
     return NDIS_STATUS_SUCCESS;
 }
 
+static
+VOID
+FreeAdapter(
+    _In_ __drv_freesMem(Mem) PB57XX_ADAPTER Adapter)
+{
+    /* The ISR handler has to be unregistered first */
+    if (Adapter->Interrupt.Interrupt.InterruptObject)
+    {
+        NdisMDeregisterInterrupt(&Adapter->Interrupt.Interrupt);
+    }
+
+    /* Free MMIO */
+    if (Adapter->IoBase)
+    {
+        NdisMUnmapIoSpace(Adapter->MiniportAdapterHandle, Adapter->IoBase, Adapter->IoLength);
+    }
+
+    /* Free shared resources */
+    FreeSharedMemory(Adapter,
+                     Adapter->StandardProducer.FrameBufferLength * Adapter->StandardProducer.Count,
+                     Adapter->StandardProducer.HostBuffer,
+                     &Adapter->StandardProducer.pRing[0].HostAddress);
+
+    FreeSharedMemory(Adapter,
+                     sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *  Adapter->StandardProducer.Count,
+                     Adapter->StandardProducer.pRing,
+                     &Adapter->StandardProducer.RingControlBlock.HostRingAddress);
+
+    FreeSharedMemory(Adapter,
+                     sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) * Adapter->ReturnConsumer[0].Count,
+                     Adapter->ReturnConsumer[0].pRing,
+                     &Adapter->ReturnConsumer[0].RingControlBlock.HostRingAddress);
+
+    FreeSharedMemory(Adapter,
+                     sizeof(B57XX_SEND_BUFFER_DESCRIPTOR) * Adapter->SendProducer[0].Count,
+                     Adapter->SendProducer[0].pRing,
+                     &Adapter->SendProducer[0].RingControlBlock.HostRingAddress);
+
+    if (Adapter->SendProducer[0].pPacketList != NULL)
+    {
+        NdisFreeMemory(Adapter->SendProducer[0].pPacketList,
+                       sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count,
+                       0);
+    }
+
+    if (Adapter->Status.pBlock != NULL)
+    {
+        NdisMFreeSharedMemory(Adapter->MiniportAdapterHandle,
+                              sizeof(*Adapter->Status.pBlock),
+                              FALSE,
+                              Adapter->Status.pBlock,
+                              Adapter->Status.HostAddress);
+    }
+
+    if (Adapter->Statistics.pBlock != NULL)
+    {
+        NdisMFreeSharedMemory(Adapter->MiniportAdapterHandle,
+                              sizeof(*Adapter->Statistics.pBlock),
+                              FALSE,
+                              Adapter->Statistics.pBlock,
+                              Adapter->Statistics.HostAddress);
+    }
+
+    /* Destroy the adapter context */
+    NdisFreeMemory(Adapter, sizeof(*Adapter), 0);
+}
+
 NDIS_STATUS
 NTAPI
 MiniportInitialize(
@@ -417,7 +482,7 @@ MiniportInitialize(
     if (Status != NDIS_STATUS_SUCCESS)
     {
         NDIS_MinDbgPrint("Unable to power on NIC (0x%lx)\n", (ULONG)Status);
-        goto Cleanup;
+        goto StopHardware;
     }
 
     /* We're ready to handle interrupts now */
@@ -432,16 +497,17 @@ MiniportInitialize(
     if (Status != NDIS_STATUS_SUCCESS)
     {
         NDIS_MinDbgPrint("Unable to register interrupt (0x%lx)\n", (ULONG)Status);
-        goto Cleanup;
+        goto StopHardware;
     }
-    Adapter->Interrupt.Registered = TRUE;
 
     NICEnableInterrupts(Adapter);
 
     return NDIS_STATUS_SUCCESS;
 
+StopHardware:
+    NICShutdown(Adapter);
 Cleanup:
-    MiniportHalt(Adapter);
+    FreeAdapter(Adapter);
 
     return Status;
 }
@@ -481,70 +547,9 @@ MiniportHalt(
 
     Adapter->HardwareStatus = NdisHardwareStatusNotReady;
 
-    /* Unregister interrupts */
-    if (Adapter->Interrupt.Registered)
-    {
-        NICDisableInterrupts(Adapter);
-        NdisMDeregisterInterrupt(&Adapter->Interrupt.Interrupt);
-        Adapter->Interrupt.Registered = FALSE;
-    }
-
     NICShutdown(Adapter);
 
-    /* Free shared resources */
-    FreeSharedMemory(Adapter,
-                     Adapter->StandardProducer.FrameBufferLength * Adapter->StandardProducer.Count,
-                     Adapter->StandardProducer.HostBuffer,
-                     &Adapter->StandardProducer.pRing[0].HostAddress);
-
-    FreeSharedMemory(Adapter,
-                     sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *  Adapter->StandardProducer.Count,
-                     Adapter->StandardProducer.pRing,
-                     &Adapter->StandardProducer.RingControlBlock.HostRingAddress);
-
-    FreeSharedMemory(Adapter,
-                     sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) * Adapter->ReturnConsumer[0].Count,
-                     Adapter->ReturnConsumer[0].pRing,
-                     &Adapter->ReturnConsumer[0].RingControlBlock.HostRingAddress);
-
-    FreeSharedMemory(Adapter,
-                     sizeof(B57XX_SEND_BUFFER_DESCRIPTOR) * Adapter->SendProducer[0].Count,
-                     Adapter->SendProducer[0].pRing,
-                     &Adapter->SendProducer[0].RingControlBlock.HostRingAddress);
-
-    if (Adapter->SendProducer[0].pPacketList != NULL)
-    {
-        NdisFreeMemory(Adapter->SendProducer[0].pPacketList,
-                       sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count,
-                       0);
-    }
-
-    if (Adapter->Status.pBlock != NULL)
-    {
-        NdisMFreeSharedMemory(Adapter->MiniportAdapterHandle,
-                              sizeof(*Adapter->Status.pBlock),
-                              FALSE,
-                              Adapter->Status.pBlock,
-                              Adapter->Status.HostAddress);
-    }
-
-    if (Adapter->Statistics.pBlock != NULL)
-    {
-        NdisMFreeSharedMemory(Adapter->MiniportAdapterHandle,
-                              sizeof(*Adapter->Statistics.pBlock),
-                              FALSE,
-                              Adapter->Statistics.pBlock,
-                              Adapter->Statistics.HostAddress);
-    }
-
-    /* Free MMIO */
-    if (Adapter->IoBase)
-    {
-        NdisMUnmapIoSpace(Adapter->MiniportAdapterHandle, Adapter->IoBase, Adapter->IoLength);
-    }
-
-    /* Destroy the adapter context */
-    NdisFreeMemory(Adapter, sizeof(*Adapter), 0);
+    FreeAdapter(Adapter);
 }
 
 NDIS_STATUS
