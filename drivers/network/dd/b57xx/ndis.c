@@ -60,6 +60,153 @@ FreeSharedMemory(
 
 static
 NDIS_STATUS
+AllocateStatusBlock(
+    _In_ PB57XX_ADAPTER Adapter)
+{
+    NdisMAllocateSharedMemory(Adapter->MiniportAdapterHandle,
+                              sizeof(*Adapter->Status.pBlock),
+                              FALSE,
+                              (PVOID*)&Adapter->Status.pBlock,
+                              &Adapter->Status.HostAddress);
+    if (Adapter->Status.pBlock == NULL)
+        return NDIS_STATUS_RESOURCES;
+    RtlZeroMemory(Adapter->Status.pBlock, sizeof(*Adapter->Status.pBlock));
+
+    return NDIS_STATUS_SUCCESS;
+}
+
+static
+NDIS_STATUS
+AllocateStatisticsBlock(
+    _In_ PB57XX_ADAPTER Adapter)
+{
+    NdisMAllocateSharedMemory(Adapter->MiniportAdapterHandle,
+                              sizeof(*Adapter->Statistics.pBlock),
+                              FALSE,
+                              (PVOID*)&Adapter->Statistics.pBlock,
+                              &Adapter->Statistics.HostAddress);
+    if (Adapter->Statistics.pBlock == NULL)
+        return NDIS_STATUS_RESOURCES;
+    RtlZeroMemory(Adapter->Statistics.pBlock, sizeof(*Adapter->Statistics.pBlock));
+
+    return NDIS_STATUS_SUCCESS;
+}
+
+static
+NDIS_STATUS
+AllocateMemory(
+    _In_ PB57XX_ADAPTER Adapter)
+{
+    NDIS_STATUS Status;
+    ULONG i;
+
+    /* Allocate the DMA resources */
+    Status = NdisMInitializeScatterGatherDma(Adapter->MiniportAdapterHandle,
+                                             FALSE, /* 32-bit DMA */
+                                             Adapter->MaxFrameSize);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        NDIS_MinDbgPrint("Unable to configure DMA\n");
+        return Status;
+    }
+
+    /* Allocate status block */
+    Status = AllocateStatusBlock(Adapter);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        NDIS_MinDbgPrint("Unable to allocate status block\n");
+        return Status;
+    }
+
+    /* Allocate statistics block */
+    if (!Adapter->B5705Plus)
+    {
+        Status = AllocateStatisticsBlock(Adapter);
+        if (Status != NDIS_STATUS_SUCCESS)
+        {
+            NDIS_MinDbgPrint("Unable to allocate statistics block\n");
+            return Status;
+        }
+    }
+
+    /* Allocate standard receive producer ring & buffer */
+    Status = InitAllocateSharedMemory(Adapter,
+                                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *
+                                      Adapter->StandardProducer.Count,
+                                      (PVOID*)&Adapter->StandardProducer.pRing,
+                                      &Adapter->StandardProducer.RingControlBlock.HostRingAddress);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        NDIS_MinDbgPrint("Unable to allocate standard receive consumer ring\n");
+        return Status;
+    }
+
+    Status = InitAllocateSharedMemory(Adapter,
+                                      Adapter->StandardProducer.FrameBufferLength *
+                                      Adapter->StandardProducer.Count,
+                                      (PVOID*)&Adapter->StandardProducer.HostBuffer,
+                                      &Adapter->StandardProducer.pRing[0].HostAddress);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        NDIS_MinDbgPrint("Unable to allocate host receive buffers\n");
+        return Status;
+    }
+
+    for (i = 0; i < Adapter->StandardProducer.Count; i++)
+    {
+        if (i != 0)
+        {
+            RtlCopyMemory(&Adapter->StandardProducer.pRing[i].HostAddress,
+                          &Adapter->StandardProducer.pRing[0].HostAddress,
+                          sizeof(B57XX_PHYSICAL_ADDRESS));
+            B57XXAccumulateAddress(&Adapter->StandardProducer.pRing[i].HostAddress,
+                                   i * Adapter->StandardProducer.FrameBufferLength);
+        }
+        Adapter->StandardProducer.pRing[i].Index = i;
+        Adapter->StandardProducer.pRing[i].Length = Adapter->StandardProducer.FrameBufferLength;
+        Adapter->StandardProducer.pRing[i].Flags = B57XX_RBD_PACKET_END;
+    }
+
+    /* Allocate receive return consumer ring */
+    Status = InitAllocateSharedMemory(Adapter,
+                                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *
+                                      Adapter->ReturnConsumer[0].Count,
+                                      (PVOID*)&Adapter->ReturnConsumer[0].pRing,
+                                      &Adapter->ReturnConsumer[0].RingControlBlock.HostRingAddress);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        NDIS_MinDbgPrint("Unable to allocate receive return ring\n");
+        return Status;
+    }
+
+    /* Allocate send producer ring & packet list */
+    Status = InitAllocateSharedMemory(Adapter,
+                                      sizeof(B57XX_SEND_BUFFER_DESCRIPTOR) *
+                                      Adapter->SendProducer[0].Count,
+                                      (PVOID*)&Adapter->SendProducer[0].pRing,
+                                      &Adapter->SendProducer[0].RingControlBlock.HostRingAddress);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        NDIS_MinDbgPrint("Unable to allocate send ring\n");
+        return Status;
+    }
+
+    Status = NdisAllocateMemoryWithTag((PVOID*)&Adapter->SendProducer[0].pPacketList,
+                                       sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count,
+                                       B57XX_TAG);
+    if (Status != NDIS_STATUS_SUCCESS)
+    {
+        NDIS_MinDbgPrint("Unable to allocate transmit packet pointer list\n");
+        return Status;
+    }
+    RtlZeroMemory(Adapter->SendProducer[0].pPacketList,
+                  sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count);
+
+    return NDIS_STATUS_SUCCESS;
+}
+
+static
+NDIS_STATUS
 InitializeAdapterResources(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ NDIS_HANDLE WrapperConfigurationContext)
@@ -251,117 +398,10 @@ MiniportInitialize(
         goto Cleanup;
     }
 
-    /* Allocate the DMA resources */
-    Status = NdisMInitializeScatterGatherDma(MiniportAdapterHandle,
-                                             FALSE,
-                                             Adapter->MaxFrameSize);
+    Status = AllocateMemory(Adapter);
     if (Status != NDIS_STATUS_SUCCESS)
     {
-        NDIS_MinDbgPrint("Unable to configure DMA\n");
-        Status = NDIS_STATUS_RESOURCES;
         goto Cleanup;
-    }
-
-    /* Allocate standard receive producer ring & buffer */
-    Status = InitAllocateSharedMemory(Adapter,
-                                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *
-                                      Adapter->StandardProducer.Count,
-                                      (PVOID*)&Adapter->StandardProducer.pRing,
-                                      &Adapter->StandardProducer.RingControlBlock.HostRingAddress);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_MinDbgPrint("Unable to allocate standard receive consumer ring\n");
-        goto Cleanup;
-    }
-
-    Status = InitAllocateSharedMemory(Adapter,
-                                      Adapter->StandardProducer.FrameBufferLength *
-                                      Adapter->StandardProducer.Count,
-                                      (PVOID*)&Adapter->StandardProducer.HostBuffer,
-                                      &Adapter->StandardProducer.pRing[0].HostAddress);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_MinDbgPrint("Unable to allocate host receive buffers\n");
-        goto Cleanup;
-    }
-
-    for (i = 0; i < Adapter->StandardProducer.Count; i++)
-    {
-        if (i != 0)
-        {
-            RtlCopyMemory(&Adapter->StandardProducer.pRing[i].HostAddress,
-                          &Adapter->StandardProducer.pRing[0].HostAddress,
-                          sizeof(B57XX_PHYSICAL_ADDRESS));
-            B57XXAccumulateAddress(&Adapter->StandardProducer.pRing[i].HostAddress,
-                                   i * Adapter->StandardProducer.FrameBufferLength);
-        }
-        Adapter->StandardProducer.pRing[i].Index = i;
-        Adapter->StandardProducer.pRing[i].Length = Adapter->StandardProducer.FrameBufferLength;
-        Adapter->StandardProducer.pRing[i].Flags = B57XX_RBD_PACKET_END;
-    }
-
-    /* Allocate receive return consumer ring */
-    Status = InitAllocateSharedMemory(Adapter,
-                                      sizeof(B57XX_RECEIVE_BUFFER_DESCRIPTOR) *
-                                      Adapter->ReturnConsumer[0].Count,
-                                      (PVOID*)&Adapter->ReturnConsumer[0].pRing,
-                                      &Adapter->ReturnConsumer[0].RingControlBlock.HostRingAddress);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_MinDbgPrint("Unable to allocate receive return ring\n");
-        goto Cleanup;
-    }
-
-    /* Allocate send producer ring & packet list */
-    Status = InitAllocateSharedMemory(Adapter,
-                                      sizeof(B57XX_SEND_BUFFER_DESCRIPTOR) *
-                                      Adapter->SendProducer[0].Count,
-                                      (PVOID*)&Adapter->SendProducer[0].pRing,
-                                      &Adapter->SendProducer[0].RingControlBlock.HostRingAddress);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_MinDbgPrint("Unable to allocate send ring\n");
-        goto Cleanup;
-    }
-
-    Status = NdisAllocateMemoryWithTag((PVOID*)&Adapter->SendProducer[0].pPacketList,
-                                       sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count,
-                                       B57XX_TAG);
-    if (Status != NDIS_STATUS_SUCCESS)
-    {
-        NDIS_MinDbgPrint("Unable to allocate transmit packet pointer list\n");
-        goto Cleanup;
-    }
-    RtlZeroMemory(Adapter->SendProducer[0].pPacketList,
-                  sizeof(PNDIS_PACKET) * Adapter->SendProducer[0].Count);
-
-    /* Allocate status block */
-    NdisMAllocateSharedMemory(Adapter->MiniportAdapterHandle,
-                              sizeof(B57XX_STATUS_BLOCK),
-                              FALSE,
-                              (PVOID*)&Adapter->Status.pBlock,
-                              &Adapter->Status.HostAddress);
-    if (Adapter->Status.pBlock == NULL)
-    {
-        NDIS_MinDbgPrint("Unable to allocate status block\n");
-        goto Cleanup;
-    }
-    RtlZeroMemory(Adapter->Status.pBlock, sizeof(B57XX_STATUS_BLOCK));
-
-    /* Allocate statistics block */
-    if (!Adapter->B5705Plus)
-    {
-        NdisMAllocateSharedMemory(Adapter->MiniportAdapterHandle,
-                                  sizeof(B57XX_STATISTICS_BLOCK),
-                                  FALSE,
-                                  (PVOID*)&Adapter->Statistics.pBlock,
-                                  &Adapter->Statistics.HostAddress);
-        if (Adapter->Statistics.pBlock == NULL)
-        {
-            NDIS_MinDbgPrint("Unable to allocate statistics block\n");
-            goto Cleanup;
-        }
-        RtlZeroMemory(Adapter->Statistics.pBlock, sizeof(B57XX_STATISTICS_BLOCK));
     }
 
     /* Adapter setup */
