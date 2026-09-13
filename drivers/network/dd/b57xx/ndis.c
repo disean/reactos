@@ -337,6 +337,14 @@ MiniportInitialize(
     _In_ NDIS_HANDLE MiniportAdapterHandle,
     _In_ NDIS_HANDLE WrapperConfigurationContext)
 {
+    {
+        WRITE_PORT_UCHAR((PUCHAR)0x43, 0xB6);
+        WRITE_PORT_UCHAR((PUCHAR)0x42, (1125000 / 700) & 0xFF);
+        WRITE_PORT_UCHAR((PUCHAR)0x42, (1125000 / 700) >> 8);
+        WRITE_PORT_UCHAR((PUCHAR)0x61, READ_PORT_UCHAR((PUCHAR)0x61) | 3);
+        KeStallExecutionProcessor(100000);
+        WRITE_PORT_UCHAR((PUCHAR)0x61, READ_PORT_UCHAR((PUCHAR)0x61) & ~3);
+    }
     PB57XX_ADAPTER Adapter;
     NDIS_STATUS Status;
     UINT i;
