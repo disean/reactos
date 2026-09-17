@@ -263,14 +263,6 @@ NDIS_STATUS
 NICApplyPacketFilter(
     _In_ PB57XX_ADAPTER Adapter);
 
-_Check_return_
-NDIS_STATUS
-NICTransmitPacket(
-    _In_ PB57XX_ADAPTER Adapter,
-    _In_ PHYSICAL_ADDRESS PhysicalAddress,
-    _In_ ULONG Length,
-    _In_ USHORT Flags);
-
 VOID
 NICEnableInterrupts(
     _In_ PB57XX_ADAPTER Adapter);

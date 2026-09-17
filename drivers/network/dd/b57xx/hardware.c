@@ -1153,32 +1153,6 @@ NICApplyPacketFilter(
     return NDIS_STATUS_SUCCESS;
 }
 
-_Check_return_
-NDIS_STATUS
-NICTransmitPacket(
-    _In_ PB57XX_ADAPTER Adapter,
-    _In_ PHYSICAL_ADDRESS PhysicalAddress,
-    _In_ ULONG Length,
-    _In_ USHORT Flags)
-{
-    ULONG Index = Adapter->SendProducer[0].ProducerIndex;
-
-    if (Adapter->SendProducer[0].RingFull == TRUE)
-    {
-        return NDIS_STATUS_RESOURCES;
-    }
-
-    Adapter->SendProducer[0].pRing[Index].Length = Length;
-    Adapter->SendProducer[0].pRing[Index].Flags = Flags;
-    B57XXConvertAddress(&Adapter->SendProducer[0].pRing[Index].HostAddress, &PhysicalAddress);
-
-    Index = (Index + 1) % Adapter->SendProducer[0].Count;
-    Adapter->SendProducer[0].ProducerIndex = Index;
-    B57XXWriteMailbox(Adapter, B57XX_MBOX_TXP_HOST_RING_INDEX1, Index);
-
-    return NDIS_STATUS_SUCCESS;
-}
-
 VOID
 NICEnableInterrupts(
     _In_ PB57XX_ADAPTER Adapter)

@@ -8,7 +8,8 @@ list(APPEND SOURCE
     hardware.c
     info.c
     interrupt.c
-    nic.h)
+    nic.h
+    send.c)
 
 add_library(b57xx MODULE ${SOURCE} b57xx.rc)
 add_pch(b57xx nic.h SOURCE)
