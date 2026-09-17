@@ -71,11 +71,12 @@ typedef struct _B57XX_ADAPTER
 {
     /* NIC Memory */
     NDIS_HANDLE MiniportAdapterHandle;
-    NDIS_HARDWARE_STATUS HardwareStatus;
     volatile PUCHAR IoBase;
     ULONG IoLength;
 
     B57XX_DEVICE_ID DeviceID;
+
+    BOOLEAN AdapterActive;
     BOOLEAN B5705Plus;
     BOOLEAN B5721Plus;
     BOOLEAN IsSerDes;
@@ -139,6 +140,8 @@ typedef struct _B57XX_ADAPTER
 
     ULONG PacketFilter;
     USHORT LinkStatus;
+    NDIS_WORK_ITEM ResetWorkItem;
+    _Interlocked_ volatile LONG ResetLock;
 } B57XX_ADAPTER, *PB57XX_ADAPTER;
 
 /* MINIPORT FUNCTIONS *****************************************************************************/
@@ -305,6 +308,16 @@ NICFillPowerManagementCapabilities(
 
 VOID
 NICOutputDebugInfo(
+    _In_ PB57XX_ADAPTER Adapter);
+
+VOID
+NTAPI
+NICResetWorker(
+    _In_ PNDIS_WORK_ITEM WorkItem,
+    _In_opt_ PVOID Context);
+
+VOID
+NICPauseAdapter(
     _In_ PB57XX_ADAPTER Adapter);
 
 /* B57XX FUNCTIONS ********************************************************************************/

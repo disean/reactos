@@ -79,6 +79,7 @@ MiniportQueryInformation(
         ULONG ULong;
         ULONG64 ULong64;
         NDIS_MEDIUM Medium;
+        NDIS_HARDWARE_STATUS Status;
         NDIS_PNP_CAPABILITIES PMCapabilities;
     } GenericInfo;
     const VOID* CopySource = &GenericInfo;
@@ -96,8 +97,7 @@ MiniportQueryInformation(
             break;
 
         case OID_GEN_HARDWARE_STATUS:
-            NDIS_MinDbgPrint("Hardware status: %d\n", Adapter->HardwareStatus);
-            GenericInfo.ULong = (ULONG)Adapter->HardwareStatus;
+            GenericInfo.Status = NdisHardwareStatusReady;
             break;
 
         case OID_GEN_MEDIA_SUPPORTED:

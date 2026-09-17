@@ -71,10 +71,8 @@ MiniportHandleInterrupt(
     BOOLEAN LinkStateChange = FALSE;
     BOOLEAN GotAny = FALSE;
 
-    if (Adapter->HardwareStatus != NdisHardwareStatusReady)
-    {
+    if (!Adapter->AdapterActive)
         return;
-    }
 
     NdisDprAcquireSpinLock(&Adapter->Interrupt.Lock);
     if (Adapter->Interrupt.Pending == FALSE)

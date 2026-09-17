@@ -441,9 +441,9 @@ MiniportInitialize(
 
     RtlZeroMemory(Adapter, sizeof(*Adapter));
     Adapter->MiniportAdapterHandle = MiniportAdapterHandle;
-    Adapter->HardwareStatus = NdisHardwareStatusNotReady;
     NdisAllocateSpinLock(&Adapter->Interrupt.Lock);
     NdisAllocateSpinLock(&Adapter->SendLock);
+    NdisInitializeWorkItem(&Adapter->ResetWorkItem, NICResetWorker, Adapter);
 
     /* Notify NDIS of some characteristics of our NIC */
     NdisMSetAttributesEx(Adapter->MiniportAdapterHandle,
@@ -512,6 +512,45 @@ Cleanup:
     return Status;
 }
 
+VOID
+NICPauseAdapter(
+    _In_ PB57XX_ADAPTER Adapter)
+{
+    /* Attempt to disable interrupts to complete more quickly */
+    NICDisableInterrupts(Adapter);
+
+    /* Prevent DPCs from executing and stop accepting incoming packets */
+    Adapter->AdapterActive = FALSE;
+
+    /* Wait for any DPCs to complete */
+    KeFlushQueuedDpcs();
+}
+
+VOID
+NTAPI
+NICResetWorker(
+    _In_ PNDIS_WORK_ITEM WorkItem,
+    _In_opt_ PVOID Context)
+{
+    PB57XX_ADAPTER Adapter = Context;
+    NDIS_STATUS Status;
+
+    UNREFERENCED_PARAMETER(WorkItem);
+
+    NICPauseAdapter(Adapter);
+
+    Status = NICSoftReset(Adapter);
+    if (Status != NDIS_STATUS_SUCCESS)
+        goto Done;
+
+    NICEnableInterrupts(Adapter);
+
+Done:
+    _InterlockedExchange(&Adapter->ResetLock, 0);
+
+    NdisMResetComplete(Adapter->MiniportAdapterHandle, Status, FALSE);
+}
+
 NDIS_STATUS
 NTAPI
 MiniportReset(
@@ -519,19 +558,19 @@ MiniportReset(
     _In_ NDIS_HANDLE MiniportAdapterContext)
 {
     PB57XX_ADAPTER Adapter = MiniportAdapterContext;
-    NDIS_STATUS Status;
+
+    UNREFERENCED_PARAMETER(AddressingReset);
 
     NDIS_MinDbgPrint("B57XX Reset\n");
 
-    *AddressingReset = TRUE;
-
-    Status = NICSoftReset(Adapter);
-    if (Status == NDIS_STATUS_SUCCESS)
+    if (_InterlockedCompareExchange(&Adapter->ResetLock, 1, 0))
     {
-        NICEnableInterrupts(Adapter);
+        return NDIS_STATUS_RESET_IN_PROGRESS;
     }
 
-    return Status;
+    NdisScheduleWorkItem(&Adapter->ResetWorkItem);
+
+    return NDIS_STATUS_PENDING;
 }
 
 VOID
@@ -542,10 +581,6 @@ MiniportHalt(
     PB57XX_ADAPTER Adapter = MiniportAdapterContext;
 
     NDIS_MinDbgPrint("B57XX Halt\n");
-
-    ASSERT(Adapter != NULL);
-
-    Adapter->HardwareStatus = NdisHardwareStatusNotReady;
 
     NICShutdown(Adapter);
 

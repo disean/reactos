@@ -134,8 +134,6 @@ NICPowerOn(
     ULONG Value;
     UINT n;
 
-    Adapter->HardwareStatus = NdisHardwareStatusNotReady;
-
     /* Initialization Procedure step 2: Disable interrupts */
     B57XXEnableReg(Adapter, B57XX_REG_MISC_HOST_CTRL, B57XX_MISC_HOST_CTRL_CINTA);
     NICDisableInterrupts(Adapter);
@@ -201,8 +199,6 @@ NICSoftReset(
     ULONG Value;
     B57XX_RING_CONTROL_BLOCK RCBValue;
     UINT n;
-
-    Adapter->HardwareStatus = NdisHardwareStatusReset;
 
     /* Initialization Procedure step 6: Prepare firmware for reset */
     B57XXWriteMemInd(Adapter, B57XX_ADDR_FW_MAILBOX, B57XX_CONST_T3_MAGIC_NUMBER);
@@ -299,7 +295,6 @@ NICSoftReset(
         NDIS_MinDbgPrint("Device did not recover reset (Firmware mailbox: 0x%lx)\n", Value);
         return NDIS_STATUS_FAILURE;
     }
-    Adapter->HardwareStatus = NdisHardwareStatusInitializing;
     NDIS_MinDbgPrint("Device is back from reset (%u)\n", n);
 
     /* Initialization Procedure step 18: Initialize the Ethernet MAC Mode register */
@@ -827,8 +822,6 @@ NICSoftReset(
     /* Initialization Procedure step 102: Enable interrupts (done later) */
     B57XXDisableRegInd(Adapter, B57XX_REG_MSI_MODE, B57XX_MSI_MODE_ENABLE);
 
-    Adapter->HardwareStatus = NdisHardwareStatusReady;
-
     return NDIS_STATUS_SUCCESS;
 }
 
@@ -1028,12 +1021,6 @@ NDIS_STATUS
 NICShutdown(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    if (Adapter->HardwareStatus != NdisHardwareStatusReady)
-    {
-        return NDIS_STATUS_FAILURE;
-    }
-    Adapter->HardwareStatus = NdisHardwareStatusClosing;
-
     NICDisableInterrupts(Adapter);
 
     /* Receive path shutdown sequence. */
@@ -1250,10 +1237,8 @@ NICQueryStatisticCounter(
 {
     *pValue64 = 0;
 
-    if (Adapter->HardwareStatus != NdisHardwareStatusReady)
-    {
+    if (!Adapter->AdapterActive)
         return;
-    }
 
     switch (Oid)
     {
