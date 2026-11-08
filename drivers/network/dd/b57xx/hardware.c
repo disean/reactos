@@ -1017,6 +1017,32 @@ Finish:
     B57XXWriteRegInd(Adapter, B57XX_REG_ETH_RX_MODE, Value);
 }
 
+static
+VOID
+NICStopBlock(
+    _In_ PB57XX_ADAPTER Adapter,
+    _In_ ULONG Address,
+    _In_ ULONG EnableBits)
+{
+    ULONG i, Value;
+
+    B57XXDisableRegInd(Adapter, Address, EnableBits);
+
+    /* Poll up to 4 ms */
+    for (i = 0; i < 4000 / 10; i++)
+    {
+        Value = B57XXReadRegInd(Adapter, Address);
+
+        if (!(Value & EnableBits))
+            return;
+
+        NdisStallExecution(10);
+    }
+
+    NDIS_MinDbgPrint("Failed to disable state machine %lX bits %08lX %08lX\n",
+                     Address, EnableBits, Value);
+}
+
 NDIS_STATUS
 NICShutdown(
     _In_ PB57XX_ADAPTER Adapter)
@@ -1024,46 +1050,44 @@ NICShutdown(
     NICDisableInterrupts(Adapter);
 
     /* Receive path shutdown sequence. */
-    B57XXDisableRegInd(Adapter, B57XX_REG_ETH_RX_MODE, B57XX_ETH_RX_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_RX_BD_MODE, B57XX_BD_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_RX_LIST_PLACE_MODE, B57XX_RX_LIST_PLACE_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_ETH_RX_MODE, B57XX_ETH_RX_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_RX_BD_MODE, B57XX_BD_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_RX_LIST_PLACE_MODE, B57XX_RX_LIST_PLACE_MODE_ENABLE);
     if (!Adapter->B5705Plus)
     {
-        B57XXDisableRegInd(Adapter,
-                           B57XX_REG_RX_LIST_SELECT_MODE,
-                           B57XX_RX_LIST_SELECT_MODE_ENABLE);
+        NICStopBlock(Adapter, B57XX_REG_RX_LIST_SELECT_MODE, B57XX_RX_LIST_SELECT_MODE_ENABLE);
     }
-    B57XXDisableRegInd(Adapter, B57XX_REG_RX_DATA_BD_MODE, B57XX_RX_DATA_BD_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_RX_DATA_COMPL_MODE, B57XX_RX_DATA_COMPL_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_RX_BD_COMPL_MODE, B57XX_BD_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_RX_DATA_BD_MODE, B57XX_RX_DATA_BD_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_RX_DATA_COMPL_MODE, B57XX_RX_DATA_COMPL_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_RX_BD_COMPL_MODE, B57XX_BD_MODE_ENABLE);
 
     /* Transmit path shutdown sequence. */
-    B57XXDisableRegInd(Adapter, B57XX_REG_TX_RING_SELECTOR_MODE, B57XX_BD_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_TX_INITIATOR_MODE, B57XX_BD_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_TX_DATA_MODE, B57XX_TX_DATA_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_DMA_READ_MODE, B57XX_DMA_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_TX_COMPL_MODE, B57XX_TX_COMPL_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_TX_RING_SELECTOR_MODE, B57XX_BD_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_TX_INITIATOR_MODE, B57XX_BD_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_TX_DATA_MODE, B57XX_TX_DATA_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_DMA_READ_MODE, B57XX_DMA_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_TX_COMPL_MODE, B57XX_TX_COMPL_MODE_ENABLE);
     if (!Adapter->B5705Plus)
     {
-        B57XXDisableRegInd(Adapter, B57XX_REG_DMA_COMPLETION, B57XX_DMA_COMPLETION_ENABLE);
+        NICStopBlock(Adapter, B57XX_REG_DMA_COMPLETION, B57XX_DMA_COMPLETION_ENABLE);
     }
-    B57XXDisableRegInd(Adapter, B57XX_REG_TX_BD_COMPL_MODE, B57XX_BD_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_ETH_MAC_MODE, B57XX_ETH_MAC_MODE_TXDMA);
-    B57XXDisableRegInd(Adapter, B57XX_REG_ETH_TX_MODE, B57XX_ETH_TX_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_TX_BD_COMPL_MODE, B57XX_BD_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_ETH_MAC_MODE, B57XX_ETH_MAC_MODE_TXDMA);
+    NICStopBlock(Adapter, B57XX_REG_ETH_TX_MODE, B57XX_ETH_TX_MODE_ENABLE);
 
     /* Memory related state machines shutdown. */
-    B57XXDisableRegInd(Adapter, B57XX_REG_COAL_HOST_MODE, B57XX_COAL_HOST_MODE_ENABLE);
-    B57XXDisableRegInd(Adapter, B57XX_REG_DMA_WRITE_MODE, B57XX_DMA_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_COAL_HOST_MODE, B57XX_COAL_HOST_MODE_ENABLE);
+    NICStopBlock(Adapter, B57XX_REG_DMA_WRITE_MODE, B57XX_DMA_MODE_ENABLE);
     if (!Adapter->B5705Plus)
     {
-        B57XXDisableRegInd(Adapter, B57XX_REG_MBUF_CLUSTER_FREE, B57XX_MBUF_CLUSTER_FREE_ENABLE);
+        NICStopBlock(Adapter, B57XX_REG_MBUF_CLUSTER_FREE, B57XX_MBUF_CLUSTER_FREE_ENABLE);
     }
     B57XXWriteRegInd(Adapter, B57XX_REG_FTQ_RESET, 0xFFFFFFFF);
     B57XXWriteRegInd(Adapter, B57XX_REG_FTQ_RESET, 0x00000000);
     if (!Adapter->B5705Plus)
     {
-        B57XXDisableRegInd(Adapter, B57XX_REG_BUF_MAN_MODE, B57XX_BUF_MAN_MODE_ENABLE);
-        B57XXDisableRegInd(Adapter, B57XX_REG_MEM_ARB_MODE, B57XX_MEM_ARB_MODE_ENABLE);
+        NICStopBlock(Adapter, B57XX_REG_BUF_MAN_MODE, B57XX_BUF_MAN_MODE_ENABLE);
+        NICStopBlock(Adapter, B57XX_REG_MEM_ARB_MODE, B57XX_MEM_ARB_MODE_ENABLE);
     }
 
     return NDIS_STATUS_SUCCESS;
