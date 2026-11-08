@@ -167,7 +167,7 @@ MiniportQueryInformation(
 
         case OID_GEN_VENDOR_DESCRIPTION:
         {
-            static const CHAR VendorDesc[] = "ReactOS Team";
+            static const CHAR VendorDesc[] = "Broadcom NetXtreme Ethernet Adapter";
             CopySource = VendorDesc;
             CopyLength = sizeof(VendorDesc);
             break;
