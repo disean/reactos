@@ -13,9 +13,56 @@
 #define B57XX_TAG       '075b'
 #define DRIVER_VERSION  1
 
+#define MAXIMUM_MULTICAST_ADDRESSES 32
+
 #define PAYLOAD_SIZE_MINI       500
 #define PAYLOAD_SIZE_STANDARD   1500
 #define PAYLOAD_SIZE_JUMBO      9000
+
+typedef UCHAR MAC_ADDRESS[ETH_LENGTH_OF_ADDRESS], *PMAC_ADDRESS;
+
+#include <pshpack1.h>
+
+/* Ethernet frame header */
+typedef struct _ETH_HEADER
+{
+    MAC_ADDRESS Destination;
+    MAC_ADDRESS Source;
+    USHORT PayloadType;
+} ETH_HEADER, *PETH_HEADER;
+
+#include <poppack.h>
+
+/* Custom Blocks for general information and important hardware states */
+
+typedef struct _B57XX_RECEIVE_PRODUCER_BLOCK
+{
+    B57XX_RING_CONTROL_BLOCK RingControlBlock;
+    PB57XX_RECEIVE_BUFFER_DESCRIPTOR pRing; // Virtual host address
+    ULONG Count; // Number of elements in the ring
+    ULONG Index; // Host producer index
+    PUCHAR HostBuffer; // Virtual host address
+    ULONG FrameBufferLength; // Aligned size of the buffer for each received frame
+} B57XX_RECEIVE_PRODUCER_BLOCK, *PB57XX_RECEIVE_PRODUCER_BLOCK;
+
+typedef struct _B57XX_RECEIVE_CONSUMER_BLOCK
+{
+    B57XX_RING_CONTROL_BLOCK RingControlBlock;
+    PB57XX_RECEIVE_BUFFER_DESCRIPTOR pRing; // Virtual host address
+    ULONG Count; // Number of elements in the ring
+    ULONG Index; // Host consumer index (tail)
+} B57XX_RECEIVE_CONSUMER_BLOCK, *PB57XX_RECEIVE_CONSUMER_BLOCK;
+
+typedef struct _B57XX_SEND_BLOCK
+{
+    B57XX_RING_CONTROL_BLOCK RingControlBlock;
+    PB57XX_SEND_BUFFER_DESCRIPTOR pRing; // Virtual host address
+    ULONG Count; // Number of elements in the ring
+    BOOLEAN RingFull;
+    PPNDIS_PACKET pPacketList;
+    ULONG ProducerIndex; // Host transmit send producer index (head)
+    ULONG ConsumerIndex; // Host completed transmission consumer index (tail)
+} B57XX_SEND_BLOCK, *PB57XX_SEND_BLOCK;
 
 typedef struct _B57XX_ADAPTER
 {

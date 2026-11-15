@@ -6,8 +6,6 @@
  */
 #pragma once
 
-#define MAXIMUM_MULTICAST_ADDRESSES 32
-
 #define MAX_ATTEMPTS        1000
 #define MAX_ATTEMPTS_PHY    5000
 
@@ -48,17 +46,7 @@
 
 #define BIT(x)  (1U << (x))
 
-typedef UCHAR MAC_ADDRESS[ETH_LENGTH_OF_ADDRESS], *PMAC_ADDRESS;
-
 #include <pshpack1.h>
-
-/* Ethernet frame header */
-typedef struct _ETH_HEADER
-{
-    MAC_ADDRESS Destination;
-    MAC_ADDRESS Source;
-    USHORT PayloadType;
-} ETH_HEADER, *PETH_HEADER;
 
 /* B47XX NICs are big endian and need addresses in big endian format */
 typedef struct _B57XX_PHYSICAL_ADDRESS
@@ -151,37 +139,6 @@ typedef ULONG B57XX_STATISTICS_BLOCK[512], *PB57XX_STATISTICS_BLOCK;
 C_ASSERT(sizeof(B57XX_STATISTICS_BLOCK) == 2048);
 
 #include <poppack.h>
-
-/* Custom Blocks for general information and important hardware states */
-
-typedef struct _B57XX_RECEIVE_PRODUCER_BLOCK
-{
-    B57XX_RING_CONTROL_BLOCK RingControlBlock;
-    PB57XX_RECEIVE_BUFFER_DESCRIPTOR pRing; // Virtual host address
-    ULONG Count; // Number of elements in the ring
-    ULONG Index; // Host producer index
-    PUCHAR HostBuffer; // Virtual host address
-    ULONG FrameBufferLength; // Aligned size of the buffer for each received frame
-} B57XX_RECEIVE_PRODUCER_BLOCK, *PB57XX_RECEIVE_PRODUCER_BLOCK;
-
-typedef struct _B57XX_RECEIVE_CONSUMER_BLOCK
-{
-    B57XX_RING_CONTROL_BLOCK RingControlBlock;
-    PB57XX_RECEIVE_BUFFER_DESCRIPTOR pRing; // Virtual host address
-    ULONG Count; // Number of elements in the ring
-    ULONG Index; // Host consumer index (tail)
-} B57XX_RECEIVE_CONSUMER_BLOCK, *PB57XX_RECEIVE_CONSUMER_BLOCK;
-
-typedef struct _B57XX_SEND_BLOCK
-{
-    B57XX_RING_CONTROL_BLOCK RingControlBlock;
-    PB57XX_SEND_BUFFER_DESCRIPTOR pRing; // Virtual host address
-    ULONG Count; // Number of elements in the ring
-    BOOLEAN RingFull;
-    PPNDIS_PACKET pPacketList;
-    ULONG ProducerIndex; // Host transmit send producer index (head)
-    ULONG ConsumerIndex; // Host completed transmission consumer index (tail)
-} B57XX_SEND_BLOCK, *PB57XX_SEND_BLOCK;
 
 /* Devices */
 
