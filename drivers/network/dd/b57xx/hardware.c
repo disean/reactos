@@ -1165,7 +1165,7 @@ NICUpdateMulticastList(
 
     for (UINT i = 0; i < Adapter->MulticastListSize; i++)
     {
-        BitPos = B57XXComputeInverseCrc32(Adapter->MulticastList[i], IEEE_802_ADDR_LENGTH) & 0x7F;
+        BitPos = B57XXComputeInverseCrc32(Adapter->MulticastList[i], ETH_LENGTH_OF_ADDRESS) & 0x7F;
         RegIndex = (BitPos & 0x60) >> 5;
         BitPos &= 0x1F;
 

@@ -6,8 +6,6 @@
  */
 #pragma once
 
-#define IEEE_802_ADDR_LENGTH 6
-
 #define MAXIMUM_MULTICAST_ADDRESSES 32
 
 #define MAX_ATTEMPTS        1000
@@ -50,7 +48,7 @@
 
 #define BIT(x)  (1U << (x))
 
-typedef UCHAR MAC_ADDRESS[IEEE_802_ADDR_LENGTH], *PMAC_ADDRESS;
+typedef UCHAR MAC_ADDRESS[ETH_LENGTH_OF_ADDRESS], *PMAC_ADDRESS;
 
 #include <pshpack1.h>
 

@@ -118,7 +118,7 @@ MiniportQueryInformation(
 
         case OID_802_3_MULTICAST_LIST:
             CopySource = Adapter->MulticastList;
-            CopyLength = Adapter->MulticastListSize * IEEE_802_ADDR_LENGTH;
+            CopyLength = Adapter->MulticastListSize * ETH_LENGTH_OF_ADDRESS;
             break;
 
         case OID_802_3_MAXIMUM_LIST_SIZE:
@@ -208,7 +208,7 @@ MiniportQueryInformation(
         case OID_802_3_PERMANENT_ADDRESS:
         case OID_802_3_CURRENT_ADDRESS:
             CopySource = Adapter->MACAddresses[0];
-            CopyLength = IEEE_802_ADDR_LENGTH;
+            CopyLength = ETH_LENGTH_OF_ADDRESS;
             break;
 
         case OID_GEN_PHYSICAL_MEDIUM:
@@ -367,11 +367,11 @@ MiniportSetInformation(
             break;
 
         case OID_802_3_MULTICAST_LIST:
-            if (InformationBufferLength % IEEE_802_ADDR_LENGTH)
+            if (InformationBufferLength % ETH_LENGTH_OF_ADDRESS)
             {
                 *BytesRead = 0;
                 *BytesNeeded = InformationBufferLength +
-                               (InformationBufferLength % IEEE_802_ADDR_LENGTH);
+                               (InformationBufferLength % ETH_LENGTH_OF_ADDRESS);
                 Status = NDIS_STATUS_INVALID_LENGTH;
                 break;
             }
@@ -386,7 +386,7 @@ MiniportSetInformation(
 
             RtlCopyMemory(Adapter->MulticastList, InformationBuffer, InformationBufferLength);
 
-            Adapter->MulticastListSize = InformationBufferLength / IEEE_802_ADDR_LENGTH;
+            Adapter->MulticastListSize = InformationBufferLength / ETH_LENGTH_OF_ADDRESS;
 
             NICUpdateMulticastList(Adapter);
             break;
