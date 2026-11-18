@@ -71,7 +71,7 @@ typedef struct _B57XX_ADAPTER
 {
     /* NIC Memory */
     NDIS_HANDLE MiniportAdapterHandle;
-    volatile PUCHAR IoBase;
+    PUCHAR IoBase;
     ULONG IoLength;
 
     B57XX_DEVICE_ID DeviceID;
@@ -522,7 +522,7 @@ VOID
 B57XXWriteMemoryRCB(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
-    _In_ volatile PB57XX_RING_CONTROL_BLOCK pRCB);
+    _In_ PB57XX_RING_CONTROL_BLOCK pRCB);
 
 ULONG
 B57XXReadPHY(

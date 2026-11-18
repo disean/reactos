@@ -1325,13 +1325,17 @@ VOID
 B57XXWriteMemoryRCB(
     _In_ PB57XX_ADAPTER Adapter,
     _In_ ULONG Address,
-    _In_ volatile PB57XX_RING_CONTROL_BLOCK pRCB)
+    _In_ PB57XX_RING_CONTROL_BLOCK pRCB)
 {
     ULONG AddressBase = Address & 0xFFFF0000;
     ULONG Offset = B57XX_REG_MEM_WINDOW + (Address & 0x0000FFFF);
 
     B57XXWritePciConfig32(Adapter, B57XX_REG_MEM_BASE, AddressBase);
-    *(PB57XX_RING_CONTROL_BLOCK)(Adapter->IoBase + Offset) = *pRCB;
+
+    B57XXWriteReg(Adapter, Offset + 0,  pRCB->HostRingAddress.HighPart);
+    B57XXWriteReg(Adapter, Offset + 4,  pRCB->HostRingAddress.LowPart);
+    B57XXWriteReg(Adapter, Offset + 8,  pRCB->MaxLength << 16 | pRCB->Flags);
+    B57XXWriteReg(Adapter, Offset + 12, pRCB->NICRingAddress);
 
     B57XXWritePciConfig32(Adapter, B57XX_REG_MEM_BASE, 0);
 }
