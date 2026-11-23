@@ -556,9 +556,4 @@ B57XXAccumulateAddress(
     _Out_ PB57XX_PHYSICAL_ADDRESS pDestination,
     _In_ LONG Offset);
 
-ULONG
-B57XXComputeInverseCrc32(
-    _In_reads_bytes_(BufferSize) const UCHAR* pBuffer,
-    _In_ ULONG BufferSize);
-
 /* EOF */

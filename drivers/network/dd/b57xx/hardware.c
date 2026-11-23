@@ -816,7 +816,6 @@ NICSoftReset(
     }
 
     /* Initialization Procedure step 101: Setup multicast filters */
-    NICUpdateMulticastList(Adapter);
     NICApplyPacketFilter(Adapter);
 
     /* Initialization Procedure step 102: Enable interrupts (done later) */
@@ -1118,28 +1117,69 @@ NICUpdateMACAddresses(
                      Adapter->MACAddresses[0][5]);
 }
 
+static
+ULONG
+B57XXComputeInverseCrc32(
+    _In_reads_bytes_(BufferSize) const UCHAR* pBuffer,
+    _In_ ULONG BufferSize)
+{
+    ULONG Crc = 0xFFFFFFFF;
+
+    for (ULONG i = 0; i < BufferSize; i++)
+    {
+        Crc ^= pBuffer[i];
+
+        for (ULONG j = 0; j < 8; j++)
+        {
+            Crc = (Crc >> 1) ^ (-(LONG)(Crc & 0x01) & 0xEDB88320);
+        }
+    }
+    return Crc;
+}
+
 NDIS_STATUS
 NICUpdateMulticastList(
     _In_ PB57XX_ADAPTER Adapter)
 {
-    ULONG RegIndex;
-    ULONG BitPos;
+    ULONG Hash[4];
 
-    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 0, 0);
-    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 4, 0);
-    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 8, 0);
-    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 12, 0);
-
-    for (UINT i = 0; i < Adapter->MulticastListSize; i++)
+    if (Adapter->PacketFilter & NDIS_PACKET_TYPE_ALL_MULTICAST)
     {
-        BitPos = B57XXComputeInverseCrc32(Adapter->MulticastList[i], ETH_LENGTH_OF_ADDRESS) & 0x7F;
-        RegIndex = (BitPos & 0x60) >> 5;
-        BitPos &= 0x1F;
-
-        ASSERT(RegIndex < 4);
-
-        B57XXEnableRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 4 * RegIndex, (1 << BitPos));
+        Hash[0] = 0xFFFFFFFF;
+        Hash[1] = 0xFFFFFFFF;
+        Hash[2] = 0xFFFFFFFF;
+        Hash[3] = 0xFFFFFFFF;
     }
+    else
+    {
+        Hash[0] = 0;
+        Hash[1] = 0;
+        Hash[2] = 0;
+        Hash[3] = 0;
+
+        if (Adapter->PacketFilter & NDIS_PACKET_TYPE_MULTICAST)
+        {
+            for (UINT i = 0; i < Adapter->MulticastListSize; i++)
+            {
+                ULONG RegIndex;
+                ULONG BitPos;
+
+                BitPos = B57XXComputeInverseCrc32(Adapter->MulticastList[i], ETH_LENGTH_OF_ADDRESS);
+                BitPos &= 0x7F;
+                RegIndex = (BitPos & 0x60) >> 5;
+                BitPos &= 0x1F;
+
+                ASSERT(RegIndex < RTL_NUMBER_OF(Hash));
+
+                Hash[RegIndex] |= 1 << BitPos;
+            }
+        }
+    }
+
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 0,  Hash[0]);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 4,  Hash[1]);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 8,  Hash[2]);
+    B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 12, Hash[3]);
 
     return NDIS_STATUS_SUCCESS;
 }
@@ -1162,17 +1202,7 @@ NICApplyPacketFilter(
     }
     B57XXWriteRegInd(Adapter, B57XX_REG_ETH_RX_MODE, Value);
 
-    if (Adapter->PacketFilter & NDIS_PACKET_TYPE_ALL_MULTICAST)
-    {
-        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 0,  0xFFFFFFFF);
-        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 4,  0xFFFFFFFF);
-        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 8,  0xFFFFFFFF);
-        B57XXWriteRegInd(Adapter, B57XX_REG_ETH_MAC_HASH + 12, 0xFFFFFFFF);
-    }
-    else
-    {
-        NICUpdateMulticastList(Adapter);
-    }
+    NICUpdateMulticastList(Adapter);
 
     return NDIS_STATUS_SUCCESS;
 }
@@ -1478,23 +1508,4 @@ B57XXAccumulateAddress(
 
     pDestination->HighPart = Address.HighPart;
     pDestination->LowPart = Address.LowPart;
-}
-
-ULONG
-B57XXComputeInverseCrc32(
-    _In_reads_bytes_(BufferSize) const UCHAR* pBuffer,
-    _In_ ULONG BufferSize)
-{
-    ULONG Crc = 0xFFFFFFFF;
-
-    for (ULONG i = 0; i < BufferSize; i++)
-    {
-        Crc ^= pBuffer[i];
-
-        for (ULONG j = 0; j < 8; j++)
-        {
-            Crc = (Crc >> 1) ^ (-(LONG)(Crc & 0x01) & 0xEDB88320);
-        }
-    }
-    return Crc;
 }
